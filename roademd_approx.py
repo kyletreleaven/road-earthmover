@@ -7,7 +7,7 @@ import cvxpy
 
 import roadmap_basic as roadmaps
 
-from nxopt import newvar
+import nxopt
 
 
 
@@ -21,6 +21,8 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
     i.e., road names; and should be different from node labels too;
     """
     digraph = nx.DiGraph()
+    digraph.add_node('s')
+    digraph.add_node('t')
     SUPPLY = []
     DEMAND = []
     
@@ -37,18 +39,20 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
         roadlen = float( data.get( length, 1 ) )   # float() just in case
         assert roadlen >= 0.
         N = int( np.ceil( roadlen / epsilon ) )
-        #print road, N
         eps = roadlen / N
+        
         bd = np.linspace( 0, roadlen, N+1 )
         bd = [ roadmaps.RoadAddress( road, x ) for x in bd ]
         for i, boundary in enumerate( zip( bd[:-1], bd[1:] ) ) :
             if surplus > 0. :
                 node = (road,i,'supply')
-                digraph.add_node( node, boundary=boundary, mass=surplus/N )
+                digraph.add_node( node, boundary=boundary )
+                digraph.add_edge( 's', node, flow=cvxpy.variable(), minflow=0., maxflow=surplus/N )
                 SUPPLY.append( node )
             if deficit > 0. :
                 node = (road,i,'demand')
-                digraph.add_node( node, boundary=boundary, mass=deficit/N )
+                digraph.add_node( node, boundary=boundary )
+                digraph.add_edge( node, 't', flow=cvxpy.variable(), minflow=0., maxflow=deficit/N )
                 DEMAND.append( node )
     
     """ ...and nodes """
@@ -58,16 +62,18 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
         if surplus > 0. :
             boundary = [ roadmaps.roadify( roadnet, u, weight=length ) ]
             node = (u,'supply')
-            digraph.add_node( node, boundary=boundary, mass=surplus )
+            digraph.add_node( node, boundary=boundary )
+            digraph.add_edge( 's', node, flow=cvxpy.variable(), minflow=0., maxflow=surplus )
             SUPPLY.append( node )
         if deficit > 0. :
             boundary = [ roadmaps.roadify( roadnet, v, weight=length ) ]
             node = (u,'demand')
-            digraph.add_node( node, boundary=boundary, mass=deficit )
+            digraph.add_node( node, boundary=boundary )
+            digraph.add_edge( node, 't', flow=cvxpy.variable(), minflow=0., maxflow=deficit )
             DEMAND.append( node )
             
             
-    """ generate flow edges """
+    """ generate bipartite graph b/w SUPPLY and DEMAND """
     for u, v in itertools.product( SUPPLY, DEMAND ) :
         bd_u = digraph.node[u]['boundary']
         bd_v = digraph.node[v]['boundary']
@@ -77,41 +83,13 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
         w = min( options )
         W = max( options )
         
-        # all flows are generated here
-        flowvar, sat = newvar()
-        digraph.add_edge( u, v, flow=flowvar, constraints=sat,
-                          cost_lo = w * flowvar, cost_hi = W * flowvar )
+        flowvar = cvxpy.variable()
+        digraph.add_edge( u, v, flow=flowvar, minflow=0., cost_lo = w * flowvar, cost_hi = W * flowvar )
         
-    """ record network constraints """
-    for u in SUPPLY :
-        out_flows = [ peel_flow( data ) for _,__,data in digraph.out_edges_iter( u, data=True ) ]
-        out_flow = sum( out_flows )
-        data = digraph.node[u]
-        capacity = data['mass']
-        sat = [ cvxpy.leq( out_flow, capacity ) ]
-        data['constraints'] = sat
-        
-    for v in DEMAND :
-        in_flows = [ peel_flow( data ) for _,__,data in digraph.in_edges_iter( v, data=True ) ]
-        in_flow = sum( in_flows )
-        data = digraph.node[v]
-        capacity = data['mass']
-        sat = [ cvxpy.leq( in_flow, data['mass'] ) ]
-        data['constraints'] = sat
-        
+    nxopt.attach_flownx_constraints( digraph )
     return digraph      # a flow network
 
 
-
-
-def peel_flow( data ) :
-    return data.get( 'flow', 0. )
-
-def peel_cost( data ) :
-    return data.get( 'cost', 0. )
-    
-def peel_constraints( data ) :
-    return data.get('constraints', [] )
 
 
 
@@ -119,6 +97,8 @@ def peel_constraints( data ) :
 
 if __name__ == '__main__' :
     import matplotlib.pyplot as plt
+    import roademd
+    
     plt.close('all')
     
     roadnet = nx.MultiDiGraph()
@@ -129,20 +109,25 @@ if __name__ == '__main__' :
         g.add_edge( 2, 3, 'road3', length=3., weight2=.1)
         g.add_edge( 3, 0, 'road4', length=5., weight1=.4)
         
-    else :
+    elif False :
         OFFSET = 10.
         roadnet.add_node( 0, weight1=.7 )
         roadnet.add_edge( 0,1, 'road1', length=1., weight1=0.+OFFSET, weight2=.5+OFFSET )
         roadnet.add_edge( 0,2, 'road2', length=2., weight2=.6 )
-        
+    else :
+        roadnet.add_edge( 0, 1, 'N', length=1., weight2=3. )
+        roadnet.add_edge( 1, 2, 'E', length=1., weight1=1000., oneway=True )
+        roadnet.add_edge( 2, 3, 'S', length=1., weight1=1. )
+        roadnet.add_edge( 3, 0, 'W', length=1., weight2=1. )
+
         
     #g.add_edge( 1, 3, 'road3 ' )
     res = roademd.EarthMoversDistance( roadnet )
     
-    digraph = measurenx_to_approxnx( roadnet, .015 )
+    digraph = measurenx_to_approxnx( roadnet, .075 )
     #total_flow = roademd.flow_on_optNW( digraph )
-    res_lo = roademd.mincost_maxflow( digraph, 'cost_lo' )
-    res_hi = roademd.mincost_maxflow( digraph, 'cost_hi' )
+    res_lo = nxopt.mincost_maxflow( digraph, 'cost_lo' )
+    res_hi = nxopt.mincost_maxflow( digraph, 'cost_hi' )
     
     #total_flow, cost, const = optNW_statistics( digraph )
     #res = solve_optNW( digraph )

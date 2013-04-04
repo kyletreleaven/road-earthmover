@@ -28,7 +28,7 @@ def roadnet_APSP( roadnet, length='length' ) :
 
 def EarthMoversDistance( measurenx, length='length', weight1='weight1', weight2='weight2', DELTA=None ) :
     digraph = measurenx_to_flownx( measurenx, length, weight1, weight2 )
-    return mincost_maxflow( digraph, cost='cost', DELTA=DELTA )
+    return nxopt.mincost_maxflow( digraph, cost='cost', DELTA=DELTA )
 
 
 def measurenx_to_flownx( roadnet, length='length', weight1='weight1', weight2='weight2' ) :
