@@ -37,36 +37,30 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
         """
         split the road into equal-length segments;
         create a node for each segment;
-        record boundary points, and mass contained
         """
         N = int( np.ceil( roadlen / epsilon ) )
         eps = roadlen / N
         
         if surplus > 0. :
-            if not oneway : digraph.add_edge( (road,0,'supply'), u, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
-            digraph.add_edge( (road,N-1,'supply'), v, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
-            
-            for i in range(N-1) :
-                node = (road,i,'supply')
-                next = (road,i+1,'supply')
-                
+            NODES = [ (road,k,'supply') for k in range(N) ]
+            for node in NODES :
                 digraph.add_edge( 's', node, flow=cvxpy.variable(), minflow=0., maxflow=surplus/N, w_lo=-eps, w_hi=0. )
-                digraph.add_edge( node, next, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
-                if not oneway : digraph.add_edge( next, node, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
+                
+            SEQ = [ u ] + NODES + [ v ]
+            for lnode, rnode in zip( SEQ[:-1], SEQ[1:] ) :
+                digraph.add_edge( lnode, rnode, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
+                if not oneway : digraph.add_edge( rnode, lnode, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
                 
         if deficit > 0. :
-            digraph.add_edge( u, (road,0,'demand'), flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
-            if not oneway : digraph.add_edge( v, (road,N-1,'supply'), flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
-            
-            for i in range(N-1) :
-                node = (road,i,'demand')
-                next = (road,i+1,'demand')
-                
-                digraph.add_edge( node, next, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
-                if not oneway : digraph.add_edge( next, node, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
+            NODES = [ (road,k,'demand') for k in range(N) ]
+            for node in NODES :
                 digraph.add_edge( node, 't', flow=cvxpy.variable(), minflow=0., maxflow=deficit/N, w_lo=-eps, w_hi=0. )
                 
-        
+            SEQ = [ u ] + NODES + [ v ]
+            for lnode, rnode in zip( SEQ[:-1], SEQ[1:] ) :
+                digraph.add_edge( lnode, rnode, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
+                if not oneway : digraph.add_edge( rnode, lnode, flow=cvxpy.variable(), minflow=0., w_lo=eps, w_hi=eps )
+                
     """ insert supply and demand of nodes """
     for u, data in roadnet.nodes_iter( data=True ) :
         surplus = data.get( weight1, 0. ) - data.get( weight2, 0. )
@@ -86,7 +80,7 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
         flowvar = cvxpy.variable()
         digraph.add_edge( u, v, flow=cvxpy.variable(), minflow=0., w_lo=weight, w_hi=weight )
     
-    # make costs
+    """ turn the weights into costs """
     for _,__,data in digraph.edges_iter( data=True ) :
         flowvar = data['flow']
         if 'w_lo' in data : data['cost_lo'] = data['w_lo'] * flowvar
@@ -123,15 +117,16 @@ if __name__ == '__main__' :
         roadnet.add_edge( 0,2, 'road2', length=2., weight2=.6 )
     else :
         roadnet.add_edge( 0, 1, 'N', length=1., weight2=3. )
-        roadnet.add_edge( 1, 2, 'E', length=1., weight1=1000., oneway=False )
+        roadnet.add_edge( 1, 2, 'E', length=1., weight1=1000., oneway=True )
         roadnet.add_edge( 2, 3, 'S', length=1., weight1=1. )
         roadnet.add_edge( 3, 0, 'W', length=1., weight2=1. )
 
         
     #g.add_edge( 1, 3, 'road3 ' )
     res = roademd.EarthMoversDistance( roadnet )
-    digraph = measurenx_to_approxnx( roadnet, .075 )
+    digraph = measurenx_to_approxnx( roadnet, .015 )
     #total_flow = roademd.flow_on_optNW( digraph )
+    
     weights_lo = [ ( (u,v), data.get('w_lo', 0.) ) for u,v,data in digraph.edges_iter( data=True ) ]
     weights_hi = [ ( (u,v), data.get('w_hi', 0.) ) for u,v,data in digraph.edges_iter( data=True ) ]
 
@@ -141,7 +136,10 @@ if __name__ == '__main__' :
     
     if True :
         res_lo = nxopt.mincost_maxflow( digraph, 'cost_lo' )
+        flows = [ ( (u,v), data['flow'].value ) for u,v,data in digraph.edges_iter( data=True ) if data['flow'].value > .0001 ]
         res_hi = nxopt.mincost_maxflow( digraph, 'cost_hi' )
+        
+
         
         #total_flow, cost, const = optNW_statistics( digraph )
         #res = solve_optNW( digraph )
