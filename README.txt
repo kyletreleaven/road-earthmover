@@ -5,4 +5,3 @@ roademd_approx2 is a road network-specialized approximation scheme which is much
 
 roademd provides the *exact* algorithm, which is *also* more efficient than either approximation scheme
 
-just testing...
