@@ -6,7 +6,6 @@ import networkx as nx
 import cvxpy
 
 import roadmap_basic as roadmaps
-
 import nxopt
 
 
@@ -21,25 +20,26 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
     i.e., road names; and should be different from node labels too;
     """
     digraph = nx.DiGraph()
-    digraph.add_node('s')
-    digraph.add_node('t')
+    #digraph.add_node('s')
+    #digraph.add_node('t')
     SUPPLY = []
     DEMAND = []
     
     """ insert supply and demand of roads """
     for u,v, road, data in roadnet.edges_iter( keys=True, data=True ) :
-        surplus = float( data.get( weight1, 0. ) ) - data.get( weight2, 0. )
-        deficit = -surplus
+        roadlen = float( data.get( length, 1 ) )   # float() just in case
+        assert roadlen >= 0.
         
         """
         split the road into equal-length segments;
         create a node for each segment;
         record boundary points, and mass contained
         """
-        roadlen = float( data.get( length, 1 ) )   # float() just in case
-        assert roadlen >= 0.
         N = int( np.ceil( roadlen / epsilon ) )
         eps = roadlen / N
+        
+        surplus = float( data.get( weight1, 0. ) ) - data.get( weight2, 0. )
+        deficit = -surplus
         
         bd = np.linspace( 0, roadlen, N+1 )
         bd = [ roadmaps.RoadAddress( road, x ) for x in bd ]
@@ -84,7 +84,7 @@ def measurenx_to_approxnx( roadnet, epsilon, length='length', weight1='weight1',
         W = max( options )
         
         flowvar = cvxpy.variable()
-        digraph.add_edge( u, v, flow=flowvar, minflow=0., cost_lo = w * flowvar, cost_hi = W * flowvar )
+        digraph.add_edge( u, v, flow=flowvar, minflow=0., w=w, W=W, cost_lo = w * flowvar, cost_hi = W * flowvar )
         
     nxopt.attach_flownx_constraints( digraph )
     return digraph      # a flow network
@@ -128,6 +128,11 @@ if __name__ == '__main__' :
     #total_flow = roademd.flow_on_optNW( digraph )
     res_lo = nxopt.mincost_maxflow( digraph, 'cost_lo' )
     res_hi = nxopt.mincost_maxflow( digraph, 'cost_hi' )
+    
+    weights_lo = [ ( (u,v), data.get('w', 0.) ) for u,v,data in digraph.edges_iter( data=True ) ]
+    weights_hi = [ ( (u,v), data.get('W', 0.) ) for u,v,data in digraph.edges_iter( data=True ) ]
+    wlo = dict( weights_lo )
+    whi = dict( weights_hi )
     
     #total_flow, cost, const = optNW_statistics( digraph )
     #res = solve_optNW( digraph )
