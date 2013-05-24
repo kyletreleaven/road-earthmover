@@ -210,20 +210,41 @@ def roadEd_conditional( roadnet, road1, road2, length_attr='length' ) :
 
 
 
-def roadEd( roadnet, distr1, distr2=None ) :
+def roadEd( roadnet, distr1, distr2=None, length_attr='length' ) :
     """
     distr1 may be a pmf over road pairs, or over roads;
     if distr2 is not present then distr1 is assumed to be the joint pmf ( i.e., over (source,target) road pairs ) ;
     if distr2 is present, then source and target are assumed i.i.d.,
         distr1 is the pmf over source roads, and distr2 is the pmf over target roads
     """
-    pass
+    if distr2 is not None : raise 'not implemented yet'
+    
+    return np.sum([ prob * roadEd_conditional( roadnet, road1, road2, length_attr ) for (road1,road2), prob in distr1.iteritems() ]) 
 
 
 
-
-
-
+def sample( roadnet, distr1, distr2=None, length_attr='length' ) :
+    """ assume distr sums to one; if not, no guaranteed behavior """
+    if distr2 is not None : raise 'not implemented yet'
+    
+    # choose appropriately, randomly... can probably do better
+    x = np.random.rand()
+    X = 0.
+    for (road1,road2), prob in distr1.iteritems() :
+        X += prob
+        if X >= x : break
+        
+    _, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
+    _, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
+    roadlen1 = data1.get( 'length' )
+    roadlen2 = data2.get( 'length' )
+    
+    x = roadlen1 * np.random.rand()
+    y = roadlen2 * np.random.rand()
+    p = ROAD.RoadAddress( road1, x )
+    q = ROAD.RoadAddress( road2, y )
+    
+    return p, q
 
 
 
@@ -234,7 +255,7 @@ if __name__ == '__main__' :
     
     """ unit test """
     
-    if False :
+    if True :
         roadnet = nx.MultiDiGraph()
         
         roadnet.add_edge( 0, 1, 'N', length=1., weight2=3. )
@@ -265,34 +286,36 @@ if __name__ == '__main__' :
             roadnet.add_edge( u, v, label, length=length, oneway=True )
             
             
-        
-    def get_pair( roadnet, road1, road2 ) :
-        _, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
-        _, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
-        roadlen1 = data1.get( 'length' )
-        roadlen2 = data2.get( 'length' )
-        
-        x = roadlen1 * np.random.rand()
-        y = roadlen2 * np.random.rand()
-        p = ROAD.RoadAddress( road1, x )
-        q = ROAD.RoadAddress( road2, y )
-        
-        return p, q
     
-    
-    ROADS = ['N', 'S', 'E', 'W' ]
-    #PAIRS = itertools.product( ROADS, ROADS )
-    #PAIRS = [ ('E','E') ]
-    edges = [ name for _,__,name in roadnet.edges( keys=True ) ]
-    PAIRS = [ ( random.choice(edges), random.choice(edges) ) for i in range(5) ]
-    for road1, road2 in PAIRS :
-        Ed_cond = roadEd_conditional( roadnet, road1, road2 )
-        #
-        pairs = [ get_pair( roadnet, road1, road2 ) for i in range(20000) ]
+    if True :
+        distr = {}
+        distr[('W','E')] = 1./5
+        distr[('N','E')] = 1./5
+        distr[('W','S')] = 3./5
+        
+        Ed = roadEd( roadnet, distr, length_attr='length' )
+        print 'Ed computed %f' % Ed
+        
+        pairs = [ sample( roadnet, distr ) for i in range(20000) ]
         dst = [ ROAD.distance( roadnet, p, q, 'length' ) for p,q in pairs ]
         Ed_emp = np.mean( dst )
-        #
-        print '(%s,%s) -> Ed computed %f, empirical %f' % ( road1, road2, Ed_cond, Ed_emp )
+        print 'Ed empirical %f' % Ed_emp
         
+        
+    else :
+        ROADS = ['N', 'S', 'E', 'W' ]
+        #PAIRS = itertools.product( ROADS, ROADS )
+        #PAIRS = [ ('E','E') ]
+        edges = [ name for _,__,name in roadnet.edges( keys=True ) ]
+        #PAIRS = [ ( random.choice(edges), random.choice(edges) ) for i in range(5) ]
+        for road1, road2 in PAIRS :
+            Ed_cond = roadEd_conditional( roadnet, road1, road2 )
+            #
+            pairs = [ sample( roadnet, { (road1, road2) : 1.} ) for i in range(20000) ]
+            dst = [ ROAD.distance( roadnet, p, q, 'length' ) for p,q in pairs ]
+            Ed_emp = np.mean( dst )
+            #
+            print '(%s,%s) -> Ed computed %f, empirical %f' % ( road1, road2, Ed_cond, Ed_emp )
+            
         
         
