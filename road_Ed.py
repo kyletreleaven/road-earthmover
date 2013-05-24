@@ -9,6 +9,8 @@ import scipy as sp
 import networkx as nx
 import sympy
 
+import polyglint2d.polyglint2d as pglint
+
 class GLOBAL :
     x = sympy.Symbol('x')
     y = sympy.Symbol('y')
@@ -26,96 +28,146 @@ def isolate( cont ) :
         yield ( i, cont[:k] + cont[k+1:] )
 
 
-""" helper classes """
-    
-"""
-    poor man's symbolic algebra library, because I can't figure out how to work inequalities in other ones
-    I should look into cvxpy for some good example of how to do this right 
-"""
-    
-    
-""" utilities """
-    
-def _compute_options_within( roadnet, road, length_attr ) :
-    edge, data = ROAD.obtain_edge( roadnet, road, True )
+""" problem specific utilities """
+
+""" "options" generators, in each of three interesting cases """
+
+def _options_roads_eq_ygeqx( roadnet, road, length_attr ) :
+    edge, data = ROAD.obtain_edge( roadnet, road, data_flag=True )
     u,v,_ = edge ; roadlen = data.get( length_attr, np.inf )
-    
     p = ROAD.roadify( roadnet, u, length_attr )
     q = ROAD.roadify( roadnet, v, length_attr )
-    alt_dist = ROAD.distance( roadnet, p, q, length_attr )
-    K = .5 * ( roadlen + alt_dist )
     
-    # cases
-    #
-    row1 = [
-            [ -1., 1. ],        
-            [ ]
-            ] 
-    # x < y ; | x - y | < K
-    c = [ -1., 1. ] ; d = 0.
-    a = [ -1., 1. ] ; b = .5 * ( roadlen)
-    # x < y ; | x - y | > K
-    
-    # x > y ; | x - y | < K
-    
-    # x > y ; | x - y | > K
+    x = GLOBAL.x ; y = GLOBAL.y
+    options = [ y - x ]
+    if not data.get( 'oneway', False ) :
+        sojourn_cost = x + ROAD.distance( roadnet, p, q, length_attr ) + roadlen - y    # a path using the rest of the network 
+        options.append( sojourn_cost )
+        
+    return options
 
+
+def _options_roads_eq_yleqx( roadnet, road, length_attr ) :
+    edge, data = ROAD.obtain_edge( roadnet, road, data_flag=True )
+    u,v,_ = edge ; roadlen = data.get( length_attr, np.inf )
+    p = ROAD.roadify( roadnet, u, length_attr )
+    q = ROAD.roadify( roadnet, v, length_attr )
     
-    
-def _compute_options_between( roadnet, road1, road2, length_attr ) :
+    x = GLOBAL.x ; y = GLOBAL.y
+    sojourn_cost = roadlen - x + ROAD.distance( roadnet, q, p, length_attr ) + y    # a path using the rest of the network 
+    options = [ sojourn_cost ]
+    if not data.get( 'oneway', False ) :
+        option.append( x - y )
+    return options
+
+
+def _options_roads_neq( roadnet, road1, road2, length_attr ) :
     edge1, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
-    edge2, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
-    
     u1,v1,_ = edge1 ; roadlen1 = data1.get( length_attr, np.inf )
+    edge2, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
     u2,v2,_ = edge2 ; roadlen2 = data2.get( length_attr, np.inf )
     
     x = GLOBAL.x ; y = GLOBAL.y    
     cost_dict = {
-                 u1 : x,
-                 v1 : roadlen1 - x,
-                 u2 : y,
-                 v2 : roadlen2 - y
+                 '<-s' : x,
+                 's->' : roadlen1 - x,
+                 '->t' : y,
+                 't<-' : roadlen2 - y
                  }
-    ensure_leq_zero = [
-                      -x,               # x >= 0
-                      x - roadlen1,     # x <= roadlen1
-                      -y,               # y >= 0
-                      y - roadlen2      # y <= roadlen2
-                      ]
-    
-    WAYP1 = [ v1 ]
-    if not data1.get( 'oneway', False ) : WAYP1.append( u1 )
-    WAYP2 = [ u2 ]
-    if not data2.get( 'oneway', False ) : WAYP1.append( v2 )
     
     options = []
-    for s in WAYP1 :
-        p = ROAD.roadify( roadnet, s, length_attr )
-        for t in WAYP2 :
-            q = ROAD.roadify( roadnet, t, length_attr )
+    # paths through endpoints
+    WAYP1 = [ ( 's->', v1 ) ]
+    if not data1.get( 'oneway', False ) : WAYP1.append( ( '<-s', u1 ) )
+    WAYP2 = [ ( '->t', u2 ) ]
+    if not data2.get( 'oneway', False ) : WAYP2.append( ( 't<-', v2 ) )
+    
+    for s,u in WAYP1 :
+        p = ROAD.roadify( roadnet, u, length_attr )
+        for t,v in WAYP2 :
+            q = ROAD.roadify( roadnet, v, length_attr )
             
             dst = ROAD.distance( roadnet, p, q, length_attr )
             cost = cost_dict[s] + dst + cost_dict[t]
-            
-            leq = [ o for o in ensure_leq_zero ]    # make a safe copy
-            options.append( ( cost, leq ) )
+            options.append( cost )
             
     return options
 
 
 
 
-def _get_phases( options ) :
-    phases = []
-    
-    for ( cost, leq ), others in isolate( options ) :
-        leq_out = [ o for o in leq ]        # make a safe copy
-        for o_cost, _ in others :
-            leq_out.append( cost - o_cost )
-            
-        phases.append( ( cost, leq_out ) )
-    return phases
 
+
+
+
+
+
+def _zonify_options( options ) :
+    zones = []
+    for cost, others in isolate( options ) :
+        ensure_leq_zero = [ cost - o_cost for o_cost in others ]
+        zones.append( ensure_leq_zero )
+    return zones
+
+
+
+
+def _compute_phases( roadnet, road1, road2, length_attr ) :
+    edge1, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
+    roadlen1 = data1.get( length_attr, np.inf )
+    edge2, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
+    roadlen2 = data2.get( length_attr, np.inf )
+    
+    res = []
+    
+    x = GLOBAL.x ; y = GLOBAL.y
+    canvas = [
+                -x,                 # x >= 0
+                x - roadlen1,       # x <= roadlen1
+                -y,                 # y >= 0
+                y - roadlen2        # y <= roadlen2
+            ]
+    
+    """ there are three "interesting" cases """
+    if road1 == road2 :
+        # case 1: road1 == road2, y >= x
+        options = _options_roads_eq_ygeqx( roadnet, road1, length_attr )
+        zones = _zonify_options( options )
+        for zone in zones :
+            zone.extend( canvas )
+            zone.append( x - y )
+        phases = zip( options, zones )
+        res.extend( phases )
+        
+        # case 2: road1 == road2, y <= x
+        options = _options_roads_eq_yleqx( roadnet, road1, length_attr )
+        zones = _zonify_options( options )
+        for zone in zones :
+            zone.extend( canvas )
+            zone.append( y - x )
+        phases = zip( options, zones )
+        res.extend( phases )
+        
+    else :
+        # case 3: road1 != road2
+        options = _options_roads_neq( roadnet, road1, road2, length_attr )
+        zones = _zonify_options( options )
+        for zone in zones :
+            zone.extend( canvas )
+        phases = zip( options, zones )
+        res.extend( phases )
+        
+    return res
+
+
+
+
+
+
+
+
+
+""" the utilities below are in a working state """
 
 def _phase_to_pglint( cost, ensure_leq_zero ) :
     x = GLOBAL.x ; y = GLOBAL.y 
@@ -133,29 +185,114 @@ def _phase_to_pglint( cost, ensure_leq_zero ) :
         A[i,:] = np.array([ a_x, a_y ])
         
     return ( c, d, A, b )
-        
 
-""" algorithms """
 
+
+
+
+
+
+""" main algorithm """
 
 def roadEd_conditional( roadnet, road1, road2, length_attr='length' ) :
-    if road1 == road2 :
-        options = _compute_options_within(roadnet, road1, road2, length_attr)
-    else :
-        options = _compute_options_between(roadnet, road1, road2, length_attr)
-        
-    return _get_phases( options )
+    edge1, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
+    roadlen1 = data1.get( length_attr, np.inf )
+    edge2, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
+    roadlen2 = data2.get( length_attr, np.inf )
+    
+    phases = _compute_phases( roadnet, road1, road2, length_attr='length' )
+    pglints = [ _phase_to_pglint( c, constr ) for c,constr in phases ]
+    # somewhere we need to normalize!
+    vals = [ pglint.integrate( c, d, A, b ) for c, d, A, b in pglints ]
+    
+    return sum( vals ) / roadlen1 / roadlen2
+
+
+
+
+def roadEd( roadnet, distr1, distr2=None ) :
+    """
+    distr1 may be a pmf over road pairs, or over roads;
+    if distr2 is not present then distr1 is assumed to be the joint pmf ( i.e., over (source,target) road pairs ) ;
+    if distr2 is present, then source and target are assumed i.i.d.,
+        distr1 is the pmf over source roads, and distr2 is the pmf over target roads
+    """
+    pass
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__' :
+    import random
     
-    roadnet = nx.MultiDiGraph()
-
-    roadnet.add_edge( 0, 1, 'N', length=1., weight2=3. )
-    roadnet.add_edge( 1, 2, 'E', length=1., weight1=1000., oneway=False )
-    roadnet.add_edge( 2, 3, 'S', length=1., weight1=1. )
-    roadnet.add_edge( 3, 0, 'W', length=1., weight2=1. )
-    #roadnet.add_node( 0, weight1=.7 )
-    #roadnet.add_edge( 0, 1 )
+    """ unit test """
+    
+    if False :
+        roadnet = nx.MultiDiGraph()
+        
+        roadnet.add_edge( 0, 1, 'N', length=1., weight2=3. )
+        roadnet.add_edge( 1, 2, 'E', length=2., weight1=1000., oneway=True )
+        roadnet.add_edge( 2, 3, 'S', length=1., weight1=1. )
+        roadnet.add_edge( 3, 0, 'W', length=1., weight2=1. )
+        #roadnet.add_node( 0, weight1=.7 )
+        #roadnet.add_edge( 0, 1 )
+        
+    else :
+        g = nx.erdos_renyi_graph( 15, .3 )
+        g = nx.connected_component_subgraphs( g )[0]
+        
+        roadnet = nx.MultiDiGraph()
+        def roadmaker() :
+            for i in itertools.count() : yield 'road%d' % i, np.random.exponential()
+        road_iter = roadmaker()
+        
+        for i, ( u,v,data ) in enumerate( g.edges_iter( data=True ) ) :
+            label, length = road_iter.next()
+            roadnet.add_edge( u, v, label, length=length )
+            
+        nodes = roadnet.nodes()
+        for i in range( 5 ) :
+            u = random.choice( nodes )
+            v = random.choice( nodes )
+            label, length = road_iter.next()
+            roadnet.add_edge( u, v, label, length=length, oneway=True )
+            
+            
+        
+    def get_pair( roadnet, road1, road2 ) :
+        _, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
+        _, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
+        roadlen1 = data1.get( 'length' )
+        roadlen2 = data2.get( 'length' )
+        
+        x = roadlen1 * np.random.rand()
+        y = roadlen2 * np.random.rand()
+        p = ROAD.RoadAddress( road1, x )
+        q = ROAD.RoadAddress( road2, y )
+        
+        return p, q
     
     
+    ROADS = ['N', 'S', 'E', 'W' ]
+    #PAIRS = itertools.product( ROADS, ROADS )
+    #PAIRS = [ ('E','E') ]
+    edges = [ name for _,__,name in roadnet.edges( keys=True ) ]
+    PAIRS = [ ( random.choice(edges), random.choice(edges) ) for i in range(5) ]
+    for road1, road2 in PAIRS :
+        Ed_cond = roadEd_conditional( roadnet, road1, road2 )
+        #
+        pairs = [ get_pair( roadnet, road1, road2 ) for i in range(20000) ]
+        dst = [ ROAD.distance( roadnet, p, q, 'length' ) for p,q in pairs ]
+        Ed_emp = np.mean( dst )
+        #
+        print '(%s,%s) -> Ed computed %f, empirical %f' % ( road1, road2, Ed_cond, Ed_emp )
+        
+        
+        
