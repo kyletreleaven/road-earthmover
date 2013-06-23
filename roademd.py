@@ -6,8 +6,8 @@ import cvxpy
 
 import numpy as np
 
-import roadmap_basic
-import nxopt
+import roadgeometry.roadmap_basic as roadmap_basic
+import nxopt.nxopt as nxopt    # deprecate!
 
 
 """ utilities """

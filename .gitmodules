@@ -1,0 +1,9 @@
+[submodule "nxopt"]
+	path = nxopt
+	url = https://github.com/kyletreleaven/network-optimization.git
+[submodule "roadgeometry"]
+	path = roadgeometry
+	url = https://github.com/kyletreleaven/roadgeometry.git
+[submodule "polyglint2d"]
+	path = polyglint2d
+	url = https://github.com/kyletreleaven/polyglint2d.git

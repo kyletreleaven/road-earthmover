@@ -7,7 +7,8 @@ from scipy.spatial import Delaunay as Tri
 
 import networkx as nx
 
-import roademd, nxopt
+import nxopt.nxopt as nxopt
+import roademd
 import roademd_approx
 import roademd_approx2
 
