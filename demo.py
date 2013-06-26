@@ -12,6 +12,7 @@ import roademd
 import roademd_approx
 import roademd_approx2
 
+import nxopt.max_flow_min_cost as flownets
 
 """
 Trial data:
@@ -44,15 +45,11 @@ if __name__ == '__main__' :
     
     roadnet = nx.MultiDiGraph()
     
-    if True :
+    if False :
         roadnet.add_edge( 0, 1, 'N', length=1., weight2=1.)
         roadnet.add_edge( 1, 2, 'E', length=1., weight1=2., oneway=False )
         roadnet.add_edge( 2, 3, 'S', length=1., weight1=3.)
         roadnet.add_edge( 3, 0, 'W', length=1., weight2=4.)
-        
-        epsilon2 = np.logspace( np.log10(.5), np.log10(1./20), 10 )
-        epsilon1 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
-        
         
     elif False :
         OFFSET = 10.
@@ -79,14 +76,18 @@ if __name__ == '__main__' :
             roadnet.add_edge( i,j,road, length=length, weight1=weight1, weight2=weight2 )
         
         
-        
-        
     """ EXPERIMENT """
-    
+    epsilon2 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
+    epsilon1 = np.logspace( np.log10(.5), np.log10(1./5), 10 )
+
     """ first, the emd """
     tick = time.time()
-    emd_digraph = roademd.measurenx_to_flownx( roadnet )
-    emd = nxopt.mincost_maxflow( emd_digraph )
+    emd_digraph, emd_costgraph = roademd.obtainWassersteinProblem( roadnet )
+    flownets.max_flow_min_cost( emd_digraph, emd_costgraph )
+    emd = flownets.totalcost( emd_costgraph ).value
+    #emd = roademd.EarthMoversDistance( roadnet )
+    #emd_digraph = roademd.measurenx_to_flownx( roadnet )
+    #emd = nxopt.mincost_maxflow( emd_digraph )
     tock = time.time()
     #
     nodes = len( emd_digraph.nodes() )

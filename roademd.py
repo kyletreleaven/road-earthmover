@@ -7,7 +7,8 @@ import cvxpy
 import numpy as np
 
 import roadgeometry.roadmap_basic as roadmap_basic
-import nxopt.nxopt as nxopt    # deprecate!
+#import nxopt.nxopt as nxopt    # deprecate!
+import nxopt.max_flow_min_cost as flownets 
 
 
 """ utilities """
@@ -27,11 +28,12 @@ def roadnet_APSP( roadnet, length='length' ) :
 """ exported functionality """
 
 def EarthMoversDistance( measurenx, length='length', weight1='weight1', weight2='weight2', DELTA=None ) :
-    digraph = measurenx_to_flownx( measurenx, length, weight1, weight2 )
-    return nxopt.mincost_maxflow( digraph, cost='cost', DELTA=DELTA )
+    flowgraph, costgraph = obtainWassersteinProblem( measurenx, length, weight1, weight2 )
+    flownets.max_flow_min_cost( flowgraph, costgraph )
+    return flownets.totalcost( costgraph ).value
 
 
-def measurenx_to_flownx( roadnet, length='length', weight1='weight1', weight2='weight2' ) :
+def obtainWassersteinProblem( roadnet, length='length', weight1='weight1', weight2='weight2' ) :
     """
     input: a road network, with weights on its elements
     output:
@@ -42,9 +44,12 @@ def measurenx_to_flownx( roadnet, length='length', weight1='weight1', weight2='w
     
     # for convenience
     #ROADS = [ key for u,v,key in roadnet.edges_iter( keys=True ) ]
+    class node : pass
+    node_s = node() ; node_t = node()
+    
     digraph = nx.DiGraph()
-    digraph.add_node('s')
-    digraph.add_node('t')
+    digraph.add_node( node_s )
+    digraph.add_node( node_t )
     
     """ insert supply and demand of roads """
     for u,v, road, data in roadnet.edges_iter( keys=True, data=True ) :
@@ -58,30 +63,23 @@ def measurenx_to_flownx( roadnet, length='length', weight1='weight1', weight2='w
         
         # supply layer
         if surplus > 0. :
-            w = roadlen / surplus
-            id = ( road, 'supply' )
-            digraph.add_edge( 's', id, flow=cvxpy.variable(), minflow=0., maxflow=surplus )
+            digraph.add_edge( node_s, road, capacity=surplus )
             
+            w = roadlen / surplus
             if oneway : ends = [ v ]
             else : ends = [ u, v ]
             for node in ends :
-                flowvar = cvxpy.variable()
-                cost = .5 * w * cvxpy.square( flowvar )
-                digraph.add_edge( id, node, flow=flowvar, minflow=0., cost=cost )
+                digraph.add_edge( road, node, decision_weight=w )
                 
         # demand layers
         if deficit > 0. :
-            w = roadlen / deficit
-            id = ( road, 'demand' )
-            digraph.add_edge( id, 't', flow=cvxpy.variable(), minflow=0., maxflow=deficit )
+            digraph.add_edge( road, node_t, capacity=deficit )
             
+            w = roadlen / deficit
             if oneway : ends = [ u ]
             else : ends = [ u, v ]
             for node in ends :
-                flowvar = cvxpy.variable()
-                cost = .5 * w * cvxpy.square( flowvar )
-                digraph.add_edge( node, id, flow=flowvar, minflow=0., cost=cost )
-                
+                digraph.add_edge( node, road, decision_weight=w )
                 
     """ insert supply and demand of nodes """
     for u, data in roadnet.nodes_iter( data=True ) :
@@ -90,24 +88,39 @@ def measurenx_to_flownx( roadnet, length='length', weight1='weight1', weight2='w
         
         # supply layer
         if surplus > 0. :
-            digraph.add_edge( 's', u, flow=cvxpy.variable(), minflow=0., maxflow=surplus )
+            digraph.add_edge( node_s, u, capacity=surplus )
         if deficit > 0. :
-            digraph.add_edge( u, 't', flow=cvxpy.variable(), minflow=0., maxflow=deficit )
-            
-            
+            digraph.add_edge( u, node_t, capacity=deficit )
             
     """ setup the network flow structure """
-    conns = roadmap_basic.connectivity_graph( roadnet )
+    conns = roadmap_basic.connectivity_graph( roadnet, length_in=length )
     for u, v, data in conns.edges_iter( data=True ) :
-        weight = data.get( length, 1 )
-        flowvar = cvxpy.variable()
-        cost = weight * flowvar
-        digraph.add_edge( u, v, weight=weight, flow=flowvar, minflow=0., cost=cost )
+        w = data.get( 'length', 1 )
+        digraph.add_edge( u, v, weight=w )
+        
+    flowgraph = flownets.obtainFlowNetwork( digraph, node_s, node_t )
+    costgraph = flownets.obtainWeightedCosts( flowgraph, digraph )        # cute trick
     
-    nxopt.attach_flownx_constraints( digraph )
-    return digraph      # a flownx
+    #return flowgraph, costgraph
     
+    for u,v, data in digraph.edges_iter( data=True ) :
+        dec_weight = data.get( 'decision_weight', None )
+        if dec_weight is None : continue
+        #
+        fdata = flowgraph.get_edge_data( u, v, 0 )   # key=0, because we have tightly controlled this construction
+        flow = fdata.get( 'flow' )
+        
+        cost = .5 * dec_weight * cvxpy.square( flow )
+        #print dec_weight, flow, cost
+        
+        cdata = costgraph.get_edge_data( u, v, 0 )
+        print cdata
+        
+        cdata['cost'] = cost
     
+    return flowgraph, costgraph
+
+
     
     
 if __name__ == '__main__' :
@@ -117,7 +130,7 @@ if __name__ == '__main__' :
     
     roadnet = nx.MultiDiGraph()
     
-    if False :
+    if True :
         g.add_edge( 0, 1, 'road1', length=2., weight1=0.+OFFSET, weight2=.5+OFFSET)
         g.add_edge( 1, 2, 'road2', length=1., weight1=.4)
         g.add_edge( 2, 3, 'road3', length=3., weight2=.1)
@@ -139,17 +152,11 @@ if __name__ == '__main__' :
         
         
     #g.add_edge( 1, 3, 'road3 ' )
-    digraph = measurenx_to_flownx( roadnet )
-    if True :
-        maxflow = nxopt.maxflow( digraph )
-        #total_flow, total_cost, constr = flownx_to_opt( digraph )
-        res = nxopt.mincost_maxflow( digraph )
-        
-        flows = [ ( (u,v), data['flow'].value ) for u,v,data in digraph.edges_iter( data=True ) ]
-        
-        print 'max flow is %f' % maxflow
-        print 'min cost max flow is %f' % res
-        
+    #print 'max flow is %f' % maxflow
+    #print 'min cost max flow is %f' % res
+    fgraph, cgraph = obtainWassersteinProblem( roadnet)
+    
+    flownets.max_flow_min_cost( fgraph, cgraph )
         
         
     
