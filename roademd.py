@@ -121,8 +121,8 @@ def obtainWassersteinProblem( roadnet, length='length', weight1='weight1', weigh
     return flowgraph, costgraph
 
 
-    
-    
+
+
 if __name__ == '__main__' :
     import matplotlib.pyplot as plt
     plt.close('all')
