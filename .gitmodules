@@ -1,0 +1,9 @@
+[submodule "mass_transport/packages/polyglint2d"]
+	path = mass_transport/packages/polyglint2d
+	url = https://github.com/kyletreleaven/polyglint2d.git
+[submodule "mass_transport/packages/roadgeometry"]
+	path = mass_transport/packages/roadgeometry
+	url = https://github.com/kyletreleaven/roadgeometry.git
+[submodule "mass_transport/packages/nxopt"]
+	path = mass_transport/packages/nxopt
+	url = https://github.com/kyletreleaven/network-optimization.git
