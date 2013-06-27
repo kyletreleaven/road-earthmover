@@ -9,16 +9,24 @@ import scipy as sp
 import networkx as nx
 import sympy
 
+
+""" my dev """
+#import polyglint2d.polyglint2d as pglint
+import roadgeometry.roadmap_basic as ROAD
+import roadgeometry.random as ROADRAND
 import polyglint2d.polyglint2d as pglint
+
+
+
+
+
+
+
 
 class GLOBAL :
     x = sympy.Symbol('x')
     y = sympy.Symbol('y')
     
-
-""" mine """
-import roadgeometry.roadmap_basic as ROAD
-import polyglint2d.polyglint2d as pglint
 
 
 """ general purpose utilities """
@@ -223,29 +231,6 @@ def roadEd( roadnet, distr1, distr2=None, length_attr='length' ) :
 
 
 
-def sample( roadnet, distr1, distr2=None, length_attr='length' ) :
-    """ assume distr sums to one; if not, no guaranteed behavior """
-    if distr2 is not None : raise 'not implemented yet'
-    
-    # choose appropriately, randomly... can probably do better
-    x = np.random.rand()
-    X = 0.
-    for (road1,road2), prob in distr1.iteritems() :
-        X += prob
-        if X >= x : break
-        
-    _, data1 = ROAD.obtain_edge( roadnet, road1, data_flag=True )
-    _, data2 = ROAD.obtain_edge( roadnet, road2, data_flag=True )
-    roadlen1 = data1.get( 'length' )
-    roadlen2 = data2.get( 'length' )
-    
-    x = roadlen1 * np.random.rand()
-    y = roadlen2 * np.random.rand()
-    p = ROAD.RoadAddress( road1, x )
-    q = ROAD.RoadAddress( road2, y )
-    
-    return p, q
-
 
 
 
@@ -296,7 +281,7 @@ if __name__ == '__main__' :
         Ed = roadEd( roadnet, distr, length_attr='length' )
         print 'Ed computed %f' % Ed
         
-        pairs = [ sample( roadnet, distr ) for i in range(20000) ]
+        pairs = [ ROADRAND.samplepair( roadnet, distr ) for i in range(20000) ]
         dst = [ ROAD.distance( roadnet, p, q, 'length' ) for p,q in pairs ]
         Ed_emp = np.mean( dst )
         print 'Ed empirical %f' % Ed_emp

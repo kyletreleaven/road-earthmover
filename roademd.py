@@ -130,11 +130,11 @@ if __name__ == '__main__' :
     
     roadnet = nx.MultiDiGraph()
     
-    if True :
-        g.add_edge( 0, 1, 'road1', length=2., weight1=0.+OFFSET, weight2=.5+OFFSET)
-        g.add_edge( 1, 2, 'road2', length=1., weight1=.4)
-        g.add_edge( 2, 3, 'road3', length=3., weight2=.1)
-        g.add_edge( 3, 0, 'road4', length=5., weight1=.4)
+    if False :
+        roadnet.add_edge( 0, 1, 'road1', length=2., weight1=0.+OFFSET, weight2=.5+OFFSET)
+        roadnet.add_edge( 1, 2, 'road2', length=1., weight1=.4)
+        roadnet.add_edge( 2, 3, 'road3', length=3., weight2=.1)
+        roadnet.add_edge( 3, 0, 'road4', length=5., weight1=.4)
         
     elif False :
         OFFSET = 10.

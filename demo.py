@@ -1,17 +1,19 @@
 
+# built-in
 import time
 import random
 
+# scientific common
 import numpy as np
 from scipy.spatial import Delaunay as Tri
-
 import networkx as nx
 
-import nxopt.nxopt as nxopt
+# dev
 import roademd
 import roademd_approx
 import roademd_approx2
 
+import nxopt.nxopt as nxopt
 import nxopt.max_flow_min_cost as flownets
 
 """

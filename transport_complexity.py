@@ -13,6 +13,18 @@ import nxopt.max_flow_min_cost as FLOW
 class Wassnode(object) : pass
 
 
+
+
+def MoversComplexity( lengraph, rategraph, length='length', rate='rate' ) :
+    # enroute cost
+    enroute_cost = demand_enroute_velocity( lengraph, rategraph, length, rate )
+    balance_cost = demand_balance_velocity( lengraph, rategraph, length, rate )
+    return enroute_cost + balance_cost
+    
+
+
+
+
 def demand_enroute_velocity( lengraph, rategraph, length='length', rate='rate' ) :
     V = 0.
     for u, v, rate_data in rategraph.edges_iter( data=True ) :
@@ -28,6 +40,8 @@ def demand_balance_velocity( lengraph, rategraph, length='length', rate='rate' )
     flowgraph, costgraph = obtainWassersteinProblem( lengraph, rategraph, length, rate )
     FLOW.max_flow_min_cost( flowgraph, costgraph )
     return FLOW.totalcost( costgraph ).value
+
+
 
 
 def obtainWassersteinProblem( lengraph, rategraph, length='length', rate='rate' ) :
@@ -74,17 +88,7 @@ def compute_surplus( digraph, rate='rate' ) :
 
 
 
-def MoversComplexity( digraph, rate='rate', distance='distance' ) :
-    # enroute cost
-    enroute_costs = [ data.get(rate) * data.get(distance) for _,__,data in digraph.edges_iter( data=True ) ]
-    enroute_cost = sum( enroute_costs )
-    
-    # balancing costs
-    W_graph, s, t = WassersteinNetwork( digraph, rate, distance )
-    flow = FLOW.max_flow_min_cost( W_graph, s, t )
-    balance_cost = FLOW.flow_cost( flow, W_graph )
-        
-    return enroute_cost + balance_cost, enroute_cost, balance_cost
+
 
 
 
@@ -98,7 +102,6 @@ def display( graph, coord='coord' ) :
     
     nx.draw( graph, pos=layout )
     
-
 
 if True :
     GRAPH = nx.DiGraph()
