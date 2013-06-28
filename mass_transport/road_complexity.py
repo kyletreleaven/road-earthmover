@@ -23,7 +23,7 @@ def MoversComplexity( lengraph, rategraph, length='length', rate='rate' ) :
     enroute_cost = demand_enroute_velocity( lengraph, rategraph, length, rate )
     balance_cost = demand_balance_velocity( lengraph, rategraph, length, rate )
     return enroute_cost + balance_cost
-    
+
 
 
 def demand_enroute_velocity( roadnet, rategraph, length='length', rate='rate' ) :
@@ -37,7 +37,7 @@ def demand_enroute_velocity( roadnet, rategraph, length='length', rate='rate' ) 
         curr_v = curr_rate * road_Ed.roadEd_conditional( roadnet, road1, road2, length )
         V[ (road1,road2) ] = curr_v
         
-    return V
+    return sum( V.values() )
 
 
 def demand_balance_velocity( roadnet, rategraph, length='length', rate='rate' ) :
@@ -75,28 +75,28 @@ if __name__ == '__main__' :
     balance_velocity = demand_balance_velocity( roadnet, rategraph )
     
     
-    
     #flowgraph, costgraph = obtainWassersteinProblem( DEMAND, DEMAND, length='distance' )
     
     print enroute_velocity, balance_velocity
     
-    if False :
-        distance_between = lambda u, v : GRAPH.get_edge_data( u, v ).get('distance')
+    if True :
+        distance_between = lambda u, v : ROAD.distance( roadnet, u, v, 'length' )
         
         class demand :
             def __init__(self, p, q ) :
                 self.pick = p
                 self.delv = q
                 
-        T = 20.
+        T = .5
         DEMANDS = []
-        for u, v, data in GRAPH.edges_iter( data=True ) :
+        for road1, road2, data in rategraph.edges_iter( data=True ) :
             n = np.random.poisson( data.get('rate') * T )
+            u = roadprob.sample_onroad( road1, roadnet, 'length' )
+            v = roadprob.sample_onroad( road2, roadnet, 'length' )
             DEMANDS.extend([ demand(u,v) for i in range(n) ])
             
         total_enroute = sum( [ distance_between( dem.pick, dem.delv ) for dem in DEMANDS ] )
         mean_enroute = total_enroute / T
-        
         
         
         if True :
@@ -108,7 +108,7 @@ if __name__ == '__main__' :
                 graph.add_edge( (dem1,0), (dem2,1), weight = -dist )    # about to do MAX_weight_matching
                     
             mate = nx.matching.max_weight_matching( graph, maxcardinality=True )
-            total_balance = sum( [ distance_between( dem1.delv, dem2.pick )
+            total_balance = -sum( [ graph.get_edge_data( (dem1,0), (dem2,1) ).get('weight')
                                   for ( (dem1,side1), (dem2,side2) ) in mate.iteritems() if side1 == 0 ] )
             mean_balance = total_balance / T
         else :

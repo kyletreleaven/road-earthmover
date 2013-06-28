@@ -114,8 +114,7 @@ def obtainWassersteinProblem( roadnet, length='length', weight1='weight1', weigh
         #print dec_weight, flow, cost
         
         cdata = costgraph.get_edge_data( u, v, 0 )
-        print cdata
-        
+        #print cdata
         cdata['cost'] = cost
     
     return flowgraph, costgraph
