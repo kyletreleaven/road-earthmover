@@ -66,6 +66,8 @@ if __name__ == '__main__' :
     
     from mass_transport import road_complexity
     
+    import mass_transport.road_complexity as mcplx
+    
     # make the roadnet and rategraph
     
     #roadnet, rates = get_sim_setting()
@@ -80,14 +82,12 @@ if __name__ == '__main__' :
     # compute max rate
     MM = road_complexity.MoversComplexity( roadnet, normrategraph )
     max_rate = 1. / MM
-    arrivalrate = 2. * max_rate
-    #arrivalrate = max_rate + 1.
+    arrivalrate = max_rate * 3.     # having some issues right now
     
     rategraph = nx.DiGraph()
     for r1, r2, data in normrategraph.edges_iter( data=True ) :
         rategraph.add_edge( r1, r2, rate=arrivalrate * data.get('rate') )
-    
-    
+        
     # construct the simulation blocks
     from simulation import Simulation
     from sources import RoadnetDemandSource
@@ -119,12 +119,24 @@ if __name__ == '__main__' :
     vehconn.demand_out.connect( veh.receive_demand )
     
     """ source -> dispatch adapter """
+    class keepcount() :
+        def __init__(self) :
+            self.count = 0
+            
+        def increment(self, *args, **kwargs ) :
+            self.count += 1
+            
+    counting = keepcount()
+    
     def give_to_dispatch( dem ) :
         p, q = dem
         loc = p
         dispatch.demand_arrived( dem, loc )
         
-    source.source().connect( give_to_dispatch )
+    source_out = source.source()
+    source_out.connect( counting.increment )
+    source_out.connect( give_to_dispatch )
+    #source.source().connect( give_to_dispatch )
     
     class data : pass
     timer = data()
@@ -138,11 +150,26 @@ if __name__ == '__main__' :
         
     source.source().connect( say )
     
-    
-    while sim.get_time() < 300. :
+    horizon = 1000.
+    while sim.get_time() < horizon :
         call = sim.get_next_action()
         call()
         
-    print len( dispatch.demands )
+        
+    print 'arrival rate (simulated, empirical): %f, %f' % ( arrivalrate, counting.count / horizon )
+    
+    nleft = len( dispatch.demands )
+    overrate_est = float( nleft ) / horizon
+    max_rate_observed = arrivalrate - overrate_est
+    
+    if nleft >= 0 : 
+        print 'max sustainable rate, observed): %f' % max_rate_observed
+    print 'max sustainable rate (predicted): %f' % max_rate
+    
+    T = 10.
+    demands = mcplx.sample_demands( T, rategraph, roadnet )
+    min_total_velocity = mcplx.enroute_cost( demands, roadnet ) / T + mcplx.balance_cost( demands, roadnet ) / T
+    print 'empirical expected max rate: %f' % ( 1. / min_total_velocity )
+    
     
     
