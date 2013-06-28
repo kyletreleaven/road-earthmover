@@ -18,10 +18,10 @@ import road_Ed, roademd
 
 
 
-def MoversComplexity( lengraph, rategraph, length='length', rate='rate' ) :
+def MoversComplexity( roadnet, rategraph, length='length', rate='rate' ) :
     # enroute cost
-    enroute_cost = demand_enroute_velocity( lengraph, rategraph, length, rate )
-    balance_cost = demand_balance_velocity( lengraph, rategraph, length, rate )
+    enroute_cost = demand_enroute_velocity( roadnet, rategraph, length, rate )
+    balance_cost = demand_balance_velocity( roadnet, rategraph, length, rate )
     return enroute_cost + balance_cost
 
 
