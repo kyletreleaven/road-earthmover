@@ -13,10 +13,13 @@ import matplotlib.pyplot as plt
 import mass_transport       # loads the relevant path, too hacky... should fix this
 
 import roadgeometry.roadmap_basic as ROAD
+import roadgeometry.probability as roadprob
+
 import road_Ed, roademd
 
 
 
+""" algorithms """
 
 def MoversComplexity( roadnet, rategraph, length='length', rate='rate' ) :
     # enroute cost
@@ -56,69 +59,86 @@ def computeImbalance( roadnet, rategraph, rate='rate' ) :
             
             
             
+            
+            
+            
+""" VALIDATION """
+
+class demand :
+    def __init__(self, p, q ) :
+        self.pick = p
+        self.delv = q
+
+
+def sample_demands( T, rategraph, roadnet, rate='rate' ) :
+    demands = []
+    point_on = lambda road : roadprob.sample_onroad( road, roadnet, 'length' )
+    for road1, road2, data in rategraph.edges_iter( data=True ) :
+        n = np.random.poisson( data.get( rate, 0. ) * T )
+        newdems = [ demand( point_on( road1 ), point_on( road2 ) ) for i in range(n) ]
+        demands.extend( newdems )
+        
+    return demands
+
+
+def enroute_cost( demands, roadnet ) :
+    distfunc = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
+    
+    enroutes = [ distfunc( dem.pick, dem.delv ) for dem in demands ]
+    total_enroute = sum( enroutes )
+    return total_enroute
+
+def balance_cost( demands, roadnet ) :
+    distfunc = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
+    
+    graph = nx.Graph()
+    for dem1, dem2 in itertools.product( demands, demands ) :
+        dist = distfunc( dem1.delv, dem2.pick )
+        graph.add_edge( (dem1,0), (dem2,1), weight = -dist )    # about to do MAX_weight_matching
+            
+    mate = nx.matching.max_weight_matching( graph, maxcardinality=True )
+    balances = [ -graph.get_edge_data( (dem1,0), (dem2,1) ).get('weight') 
+                for ( (dem1,side1), (dem2,side2) ) in mate.iteritems() if side1 == 0 ]
+    total_balance = sum( balances )
+    return total_balance
+
+
+
 
 if __name__ == '__main__' :
-    #import mass_transport
-    import roadgeometry.probability as roadprob
-
+    
+    # make a random roadnet
     roadnet = roadprob.sampleroadnet()
     
+    # make a random rate graph
     rategraph = nx.DiGraph()
-    #
     for _,__,road1, data1 in roadnet.edges_iter( keys=True, data=True ) :
         for _,__,road2, data2 in roadnet.edges_iter( keys=True, data=True ) :
             
             curr_rate = np.random.exponential()
             rategraph.add_edge( road1, road2, rate=curr_rate )
             
+    # compute the components of cost rate
     enroute_velocity = demand_enroute_velocity( roadnet, rategraph )
     balance_velocity = demand_balance_velocity( roadnet, rategraph )
     
-    
-    #flowgraph, costgraph = obtainWassersteinProblem( DEMAND, DEMAND, length='distance' )
+    # flowgraph, costgraph = obtainWassersteinProblem( DEMAND, DEMAND, length='distance' )
     
     print enroute_velocity, balance_velocity
     
     if True :
-        distance_between = lambda u, v : ROAD.distance( roadnet, u, v, 'length' )
+        T = 1.
+        DEMANDS = sample_demands( T, rategraph, roadnet )
         
-        class demand :
-            def __init__(self, p, q ) :
-                self.pick = p
-                self.delv = q
-                
-        T = .5
-        DEMANDS = []
-        for road1, road2, data in rategraph.edges_iter( data=True ) :
-            n = np.random.poisson( data.get('rate') * T )
-            u = roadprob.sample_onroad( road1, roadnet, 'length' )
-            v = roadprob.sample_onroad( road2, roadnet, 'length' )
-            DEMANDS.extend([ demand(u,v) for i in range(n) ])
-            
-        total_enroute = sum( [ distance_between( dem.pick, dem.delv ) for dem in DEMANDS ] )
-        mean_enroute = total_enroute / T
-        
+        mean_enroute = enroute_cost( DEMANDS, roadnet ) / T
         
         if True :
-            graph = nx.Graph()
-            for dem1, dem2 in itertools.product( DEMANDS, DEMANDS ) :
-                #if dem2 is dem1 : continue  # those edges aren't in there
-                
-                dist = distance_between( dem1.delv, dem2.pick )
-                graph.add_edge( (dem1,0), (dem2,1), weight = -dist )    # about to do MAX_weight_matching
-                    
-            mate = nx.matching.max_weight_matching( graph, maxcardinality=True )
-            total_balance = -sum( [ graph.get_edge_data( (dem1,0), (dem2,1) ).get('weight')
-                                  for ( (dem1,side1), (dem2,side2) ) in mate.iteritems() if side1 == 0 ] )
-            mean_balance = total_balance / T
+            mean_balance = balance_cost( DEMANDS, roadnet ) / T
         else :
             mean_balance = None
         
         print mean_enroute, mean_balance
         
-        
-        
-
 
 
 
