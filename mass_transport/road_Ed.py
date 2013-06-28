@@ -13,7 +13,7 @@ import sympy
 """ my dev """
 #import polyglint2d.polyglint2d as pglint
 import roadgeometry.roadmap_basic as ROAD
-import roadgeometry.random as ROADRAND
+import roadgeometry.probability as ROADRAND
 import polyglint2d.polyglint2d as pglint
 
 

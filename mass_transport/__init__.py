@@ -14,12 +14,17 @@ for dir in os.listdir( git_sub_modules_abs ) :
     path = os.path.join( git_sub_modules_abs, dir )
     if not path in sys.path :
         sys.path.append( path )
-        
-        
-        
+
+
+
 """ imports """
+
+import roadgeometry
+import nxopt
+import polyglint2d
+
 
 import road_Ed
 import roademd
-import roademd_approx1
+import roademd_approx
 import roademd_approx2

@@ -9,12 +9,18 @@ from scipy.spatial import Delaunay as Tri
 import networkx as nx
 
 # dev
-import roademd
-import roademd_approx
-import roademd_approx2
+import mass_transport
+#
+nxopt = mass_transport.nxopt.nxopt
+flownets = mass_transport.nxopt.max_flow_min_cost
 
-import nxopt.nxopt as nxopt
-import nxopt.max_flow_min_cost as flownets
+from mass_transport import roademd, roademd_approx, roademd_approx2
+
+#import roademd
+#import roademd_approx
+#import roademd_approx2
+#import mass_transport.nxopt.nxopt as nxopt
+#import mass_transport.nxopt.max_flow_min_cost as flownets
 
 """
 Trial data:
@@ -79,8 +85,12 @@ if __name__ == '__main__' :
         
         
     """ EXPERIMENT """
-    epsilon2 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
-    epsilon1 = np.logspace( np.log10(.5), np.log10(1./5), 10 )
+    if False :      # fast
+        epsilon2 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
+        epsilon1 = np.logspace( np.log10(.5), np.log10(1./5), 10 )
+    else :          # slow
+        epsilon2 = np.logspace( np.log10(.5), np.log10(1./20), 10 )
+        epsilon1 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
 
     """ first, the emd """
     tick = time.time()
