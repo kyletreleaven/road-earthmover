@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from basicsim.signaling import Signal, Message
+from signaling import Signal, Message
 
 
 class NNeighDispatcher :
@@ -37,7 +37,7 @@ class NNeighDispatcher :
         self.demands[ demand ] = location
         self._try_dispatch()
         
-    """ slot """
+    """ slot, collected from interfaces """
     def request_in(self, interface, location ) :
         self.pending.append( ( interface, location ) )
         self._try_dispatch()
@@ -60,17 +60,4 @@ class NNeighDispatcher :
         
         
         
-if __name__ == '__main__' :
-    from basicsim.simulation import Simulation
-    
-    sim = Simulation()
-    
-    
-    
-    
-
-
-
-
-
     

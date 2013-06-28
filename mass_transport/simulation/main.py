@@ -1,17 +1,26 @@
 
+# builtin
 import itertools
 import random
 
+# science common
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 
-import pydot
+# dev
+from signaling import Signal, Message
 
 
-from basicsim.signaling import Signal, Message
+""" simulation object definitions """
 
 
+
+
+
+
+
+""" convenient constructors """
 
 def get_sim_setting() :
     g = nx.erdos_renyi_graph( 10, .3 )
@@ -47,97 +56,67 @@ def get_sim_setting() :
 
 
 
-class Vehicle :
-    def __init__(self, dispatch ) :
-        self.dispatch = dispatch
-        self.ready = Signal()
-        
-    def join_sim(self, sim ) :
-        self.sim = sim
-        self.sim.schedule( self.ready_at )
-        
-        
-    def set_environment(self, f_dist ) :
-        self.f_dist = f_dist
-        
-    def set_location(self, location ) :
-        self.location = location
-        
-    """ signaloid """
-    def ready_at(self) : self.ready( self.location )
-        
-    """ slot """
-    def receive_demand(self, demand ) :
-        p, q = demand
-        time = self.sim.get_time()
-        print 'got demand at %f: (%s, %s)' % ( time, repr(p), repr(q) )
-        
-        self.pick = p ; self.delv = q
-        
-        dist_curr_to_pick = self.f_dist( self.location, p )
-        print 'moving to pickup, there in %f' % dist_curr_to_pick
-        self.sim.schedule( self.arrived_at_pickup, dist_curr_to_pick )
-        
-    """ auto slot """
-    def arrived_at_pickup(self) :
-        self.location = self.pick
-        time = self.sim.get_time()
-        print 'arrived to pickup at %f' % time
-        
-        q = self.delv
-        dist_pick_to_delv = self.f_dist( self.location, q )
-        print 'moving to delivery, there in %f' % dist_pick_to_delv
-        self.sim.schedule( self.delivered, dist_pick_to_delv )
-        
-    """ auto slot """
-    def delivered(self) :
-        time = self.sim.get_time()
-        print 'delivered at %f' % time
-        self.ready_at()
-
-
-
-
 
 if __name__ == '__main__' :
-    import roadEMD_git.roadmap_basic as ROADS
+    import mass_transport
+    import mass_transport.tests.testcases as testcases
     
-    from basicsim.simulation import Simulation
-    from sources import RoadnetDemandSource 
+    import roadgeometry.roadmap_basic as ROAD
+    import roadgeometry.probability as roadprob
+    
+    from mass_transport import road_complexity
+    
+    # make the roadnet and rategraph
+    
+    #roadnet, rates = get_sim_setting()
+    
+    roadnet = testcases.RoadnetExamples.get( 'nesw' )
+    normrategraph = nx.DiGraph()
+    normrategraph.add_edge( 'N', 'E', rate=1./5 )
+    normrategraph.add_edge( 'W', 'E', rate=1./5 )
+    normrategraph.add_edge( 'W', 'S', rate=3./5 )
+    # Note: rates sum to 1.
+    
+    # compute max rate
+    MM = road_complexity.MoversComplexity( roadnet, normrategraph )
+    max_rate = 1. / MM
+    arrivalrate = 2. * max_rate
+    #arrivalrate = max_rate + 1.
+    
+    rategraph = nx.DiGraph()
+    for r1, r2, data in normrategraph.edges_iter( data=True ) :
+        rategraph.add_edge( r1, r2, rate=arrivalrate * data.get('rate') )
+    
+    
+    # construct the simulation blocks
+    from simulation import Simulation
+    from sources import RoadnetDemandSource
     from queues import NNeighDispatcher
-    
-    roadnet, rates = get_sim_setting()
+    from servers import Vehicle
     
     sim = Simulation()
     
-    rnet_demands = RoadnetDemandSource( roadnet, rates )
-    rnet_demands.join_sim( sim )
+    source = RoadnetDemandSource( roadnet, rategraph )
+    source.join_sim( sim )
     
-    f_dist = lambda p, q : ROADS.distance( roadnet, p, q, 'length' )
+    f_dist = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
     
     dispatch = NNeighDispatcher()
+    dispatch.set_environment( f_dist )
     dispatch.join_sim( sim )
     
-    veh = Vehicle( dispatch )
+    veh = Vehicle()
+    veh.set_environment( f_dist )
+    randpoint = roadprob.sampleaddress( roadnet, 'length' )
+    veh.set_location( randpoint )
     veh.join_sim( sim )
     
-    dispatch.set_environment( f_dist )
-    veh.set_environment( f_dist )
-    
-    def randomaddress( roadnet, length='length' ) :
-        _,__,road,data = random.choice( roadnet.edges( keys=True, data=True ) )
-        roadlen = data.get(length,1)
-        y = roadlen * np.random.rand()
-        return ROADS.RoadAddress(road,y)
-    
-    randpoint = randomaddress( roadnet )
-    veh.set_location( randpoint )
-    
+    # connect components in simulation schematic
     """ signal connections """
     
-    interface = dispatch.spawn_interface()
-    veh.ready.connect( interface.request_in )
-    interface.demand_out.connect( veh.receive_demand )
+    vehconn = dispatch.spawn_interface()
+    veh.ready.connect( vehconn.request_in )
+    vehconn.demand_out.connect( veh.receive_demand )
     
     """ source -> dispatch adapter """
     def give_to_dispatch( dem ) :
@@ -145,7 +124,7 @@ if __name__ == '__main__' :
         loc = p
         dispatch.demand_arrived( dem, loc )
         
-    rnet_demands.source().connect( give_to_dispatch )
+    source.source().connect( give_to_dispatch )
     
     class data : pass
     timer = data()
@@ -157,13 +136,13 @@ if __name__ == '__main__' :
         print 'tick, %f: %s, %s' % ( elapsed, repr(p), repr(q) )
         timer.last_time = new_time
         
-    rnet_demands.source().connect( say )
+    source.source().connect( say )
     
     
-    for i in range(20) :
+    while sim.get_time() < 300. :
         call = sim.get_next_action()
         call()
         
-        
+    print len( dispatch.demands )
     
     

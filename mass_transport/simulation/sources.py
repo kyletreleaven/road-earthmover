@@ -1,75 +1,79 @@
 
 import numpy as np
-import networkx as nx
+from signaling import Signal, Message
 
-from spatialq_basic.sources.basic import PoissonClock
+# dev
+import mass_transport
+import roadgeometry.roadmap_basic as ROAD
+import roadgeometry.probability as roadprob
 
-import roadEMD_git.roadmap_basic as ROAD
-import roadEMD_git.roademd as road_EMD
-import roadEMD_git.road_Ed as road_Ed
-from basicsim.signaling import Signal
+
+
+class PoissonClock(object) :
+    
+    def __init__(self, rate=1. ) :
+        self.rate = rate
+        self._output = Signal()
+        
+    def _reschedule(self) :
+        tau = np.random.exponential( 1. / self.rate )
+        self.sim.schedule( self.tick, tau )
+        
+    def join_sim(self, sim ) :
+        self.sim = sim
+        self._reschedule()
+        
+    def tick(self) :
+        self._output()
+        self._reschedule()
+        
+    def source(self) :
+        return self._output
 
 
 
 
 class RoadnetDemandSource(object) :
-    def __init__(self, roadnet, rates, length_key='length', rate_key='rate' ) :
+    def __init__(self, roadnet, rategraph, length_key='length', rate_key='rate' ) :
         self.roadnet = roadnet
-        self.rates = rates
         self.length_key = length_key
+        #self.rates = rates
         
+        """ state vars """
+        #self.clocks = {}
+        self.clocks = set()
+        
+        """ signal """
         self.output = Signal()
-        self.clocks = {}
         
-        class PointEmitter :
-            def __init__(self, source, road1, road2 ) :
-                self.source = source
-                self.road1 = road1
-                self.road2 = road2
-                
-            def emit(self) :
-                self.source.emit_point( self.road1, self.road2 )
-        
-        for r1, r2, data in rates.edges_iter( data=True ) :
+        for r1, r2, data in rategraph.edges_iter( data=True ) :
             rate = data.get( rate_key, 0. )
             if rate <= 0. : continue
+            
             clock = PoissonClock( rate )
+            msg = Message( self.emit_point, r1, r2 )
+            clock.source().connect( msg )
             
-            emitter = PointEmitter( self, r1, r2 )
+            self.clocks.add( clock )
             
-            clock.source().connect( emitter.emit )
-            self.clocks[ clock ] = emitter
             
-        
     def join_sim(self, sim ) :
         self.sim = sim
         for clock in self.clocks :
             clock.join_sim( sim )
-                    
             
-    def report_clock(self, clock ) :
-        print clock
-            
+    """ auto slotoid """
     def emit_point(self, road1, road2 ) :
         _, data1 = ROAD.obtain_edge( self.roadnet, road1, data_flag=True )
         _, data2 = ROAD.obtain_edge( self.roadnet, road2, data_flag=True )
-        roadlen1 = data1.get( self.length_key )
-        roadlen2 = data2.get( self.length_key )
         
-        x = roadlen1 * np.random.rand()
-        y = roadlen2 * np.random.rand()
-        p = ROAD.RoadAddress( road1, x )
-        q = ROAD.RoadAddress( road2, y )
+        p = roadprob.sample_onroad( road1, self.roadnet )
+        q = roadprob.sample_onroad( road2, self.roadnet )
         
-        self.output( ( p, q ) )
-            
-            
-    def source(self) :
-        return self.output
+        self.output( (p,q) )
         
         
-
-
+    def source(self) : return self.output
 
 
 
