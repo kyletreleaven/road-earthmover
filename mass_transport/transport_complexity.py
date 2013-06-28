@@ -8,6 +8,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 #import road_Ed, roademd
+import mass_transport
 import nxopt.max_flow_min_cost as FLOW
 
 class Wassnode(object) : pass
@@ -170,13 +171,8 @@ if True :
     
     print mean_enroute, mean_balance
     
-        
-        
-        
     
     
     
     
     
-            
-            

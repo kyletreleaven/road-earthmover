@@ -65,7 +65,7 @@ def _options_roads_eq_yleqx( roadnet, road, length_attr ) :
     sojourn_cost = roadlen - x + ROAD.distance( roadnet, q, p, length_attr ) + y    # a path using the rest of the network 
     options = [ sojourn_cost ]
     if not data.get( 'oneway', False ) :
-        option.append( x - y )
+        options.append( x - y )
     return options
 
 
