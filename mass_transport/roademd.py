@@ -97,7 +97,8 @@ def obtainWassersteinProblem( roadnet, length='length', weight1='weight1', weigh
     for u, v, data in conns.edges_iter( data=True ) :
         w = data.get( 'length', 1 )
         digraph.add_edge( u, v, weight=w )
-        
+    
+    #return digraph, node_s, node_t        # this *just* produced a flowgraph; no problem
     flowgraph = flownets.obtainFlowNetwork( digraph, node_s, node_t )
     costgraph = flownets.obtainWeightedCosts( flowgraph, digraph )        # cute trick
     
