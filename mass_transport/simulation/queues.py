@@ -2,16 +2,20 @@
 import numpy as np
 
 from signaling import Signal, Message
+import roadgeometry.roadsearch as search
+
 
 
 class NNeighDispatcher :
     
     def __init__(self) :
+        self.locations = search.PointSet()
         self.demands = {}
+        
         self.pending = []
         
-    def set_environment(self, f_dist ) :
-        self.f_dist = f_dist
+    def set_environment(self, roadnet ) :
+        self.roadnet = roadnet
         
     def join_sim(self, sim ) :
         self.sim = sim
@@ -34,7 +38,9 @@ class NNeighDispatcher :
     
     """ slot """
     def demand_arrived(self, demand, location ) :
-        self.demands[ demand ] = location
+        self.locations.insert( location )
+        self.demands[ location ] = demand
+        
         self._try_dispatch()
         
     """ slot, collected from interfaces """
@@ -50,10 +56,9 @@ class NNeighDispatcher :
         
         interface, location = self.pending.pop(0)       # get the next pending request
         
-        opts = [ ( self.f_dist( location, dem_loc ), dem )
-                for dem, dem_loc in self.demands.iteritems() ]
-        dem = min( opts )[1]
-        self.demands.pop( dem )
+        loc = self.locations.find_nearest( location, self.roadnet, 'length' )
+        self.locations.remove( loc )
+        dem = self.demands.pop( loc )
         
         msg = Message( interface.demand_out, dem )
         self.sim.schedule( msg )

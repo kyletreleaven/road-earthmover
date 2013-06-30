@@ -99,8 +99,8 @@ if __name__ == '__main__' :
     # compute max rate
     MM = road_complexity.MoversComplexity( roadnet, normrategraph )
     max_rate = 1. / MM
-    arrivalrate = max_rate + 1.      # having some issues right now
-    arrivalrate = .455      # about 1.05 * the "observed max"
+    arrivalrate = max_rate * 1.01      # having some issues right now
+    #arrivalrate = .455      # about 1.05 * the "observed max"
     
     rategraph = nx.DiGraph()
     for r1, r2, data in normrategraph.edges_iter( data=True ) :
@@ -121,7 +121,7 @@ if __name__ == '__main__' :
     f_dist = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
     
     dispatch = NNeighDispatcher()
-    dispatch.set_environment( f_dist )
+    dispatch.set_environment( roadnet )
     dispatch.join_sim( sim )
     
     """ add some demands to jump-start the simulation """
@@ -184,7 +184,7 @@ if __name__ == '__main__' :
     recorder.join_sim( sim )
     
     
-    horizon = 10.
+    horizon = 10000.
     while sim.get_time() < horizon :
         call = sim.get_next_action()
         call()
@@ -200,8 +200,8 @@ if __name__ == '__main__' :
         print 'max sustainable rate (observed): %f' % max_rate_observed
     print 'max sustainable rate (predicted): %f' % max_rate
     
-    T = 100.
-    demands = mcplx.sample_demands( T, rategraph, roadnet )
+    T = 1.
+    demands = mcplx.sample_demands( T, normrategraph, roadnet )
     min_total_velocity = mcplx.enroute_cost( demands, roadnet ) / T + mcplx.balance_cost( demands, roadnet ) / T
     print 'empirical expected max rate: %f' % ( 1. / min_total_velocity )
     
