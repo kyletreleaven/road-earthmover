@@ -47,7 +47,15 @@ class Vehicle :
         
     """ auto slot """
     def delivered(self) :
+        self.location = self.delv
         time = self.sim.get_time()
         print 'delivered at %f' % time
+        
         self.ready_at()
+
+
+
+
+
+
 
