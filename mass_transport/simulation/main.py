@@ -14,8 +14,25 @@ from signaling import Signal, Message
 
 """ simulation object definitions """
 
-
-
+class UniformPoller :
+    def __init__(self, T ) :
+        self.T = T
+        self._counter = itertools.count()
+        
+        self.tape = []
+        
+    def set_query(self, callback ) :
+        self.callback = callback
+        
+    def join_sim(self, sim ) :
+        self.sim = sim
+        self.sim.schedule( self.tick )
+        
+    """ auto slot """
+    def tick(self) :
+        amount = self.callback()
+        self.tape.append( amount )
+        self.sim.schedule( self.tick, self.T )
 
 
 
@@ -82,7 +99,8 @@ if __name__ == '__main__' :
     # compute max rate
     MM = road_complexity.MoversComplexity( roadnet, normrategraph )
     max_rate = 1. / MM
-    arrivalrate = max_rate * 3.     # having some issues right now
+    arrivalrate = max_rate + 1.      # having some issues right now
+    arrivalrate = .455      # about 1.05 * the "observed max"
     
     rategraph = nx.DiGraph()
     for r1, r2, data in normrategraph.edges_iter( data=True ) :
@@ -99,11 +117,21 @@ if __name__ == '__main__' :
     source = RoadnetDemandSource( roadnet, rategraph )
     source.join_sim( sim )
     
+    # the function which will be used by various components to compute distances
     f_dist = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
     
     dispatch = NNeighDispatcher()
     dispatch.set_environment( f_dist )
     dispatch.join_sim( sim )
+    
+    """ add some demands to jump-start the simulation """
+    preload = 0
+    distr = {}
+    for road1, road2, rate_data in normrategraph.edges_iter( data=True ) :
+        distr[(road1,road2)] = rate_data.get( 'rate', 0. )
+    bonus_demands = [ roadprob.samplepair( roadnet, distr ) for i in range(preload) ]
+    for p, q in bonus_demands : dispatch.demand_arrived( (p,q), p )
+    """ end cheats """
     
     veh = Vehicle()
     veh.set_environment( f_dist )
@@ -150,23 +178,29 @@ if __name__ == '__main__' :
         
     source.source().connect( say )
     
-    horizon = 1000.
+    recorder = UniformPoller( 1. )
+    unserviced_query = lambda : len( dispatch.demands )
+    recorder.set_query( unserviced_query )
+    recorder.join_sim( sim )
+    
+    
+    horizon = 10.
     while sim.get_time() < horizon :
         call = sim.get_next_action()
         call()
         
         
-    print 'arrival rate (simulated, empirical): %f, %f' % ( arrivalrate, counting.count / horizon )
+    print 'arrival rate (simulated, observed): %f, %f' % ( arrivalrate, counting.count / horizon )
     
     nleft = len( dispatch.demands )
-    overrate_est = float( nleft ) / horizon
+    overrate_est = float( nleft - preload ) / horizon
     max_rate_observed = arrivalrate - overrate_est
     
     if nleft >= 0 : 
-        print 'max sustainable rate, observed): %f' % max_rate_observed
+        print 'max sustainable rate (observed): %f' % max_rate_observed
     print 'max sustainable rate (predicted): %f' % max_rate
     
-    T = 10.
+    T = 100.
     demands = mcplx.sample_demands( T, rategraph, roadnet )
     min_total_velocity = mcplx.enroute_cost( demands, roadnet ) / T + mcplx.balance_cost( demands, roadnet ) / T
     print 'empirical expected max rate: %f' % ( 1. / min_total_velocity )
