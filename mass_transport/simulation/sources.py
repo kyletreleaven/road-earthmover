@@ -64,8 +64,8 @@ class RoadnetDemandSource(object) :
             
     """ auto slotoid """
     def emit_point(self, road1, road2 ) :
-        _, data1 = ROAD.obtain_edge( self.roadnet, road1, data_flag=True )
-        _, data2 = ROAD.obtain_edge( self.roadnet, road2, data_flag=True )
+        #_, data1 = ROAD.obtain_edge( self.roadnet, road1, data_flag=True )
+        #_, data2 = ROAD.obtain_edge( self.roadnet, road2, data_flag=True )
         
         p = roadprob.sample_onroad( road1, self.roadnet )
         q = roadprob.sample_onroad( road2, self.roadnet )
