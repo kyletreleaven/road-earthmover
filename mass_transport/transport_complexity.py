@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import mass_transport
 import nxopt.max_flow_min_cost as FLOW
 
-class Wassnode(object) : pass
+#class Wassnode(object) : pass
 
 
 
@@ -24,8 +24,6 @@ def MoversComplexity( lengraph, rategraph, length='length', rate='rate' ) :
     
 
 
-
-
 def demand_enroute_velocity( lengraph, rategraph, length='length', rate='rate' ) :
     V = 0.
     for u, v, rate_data in rategraph.edges_iter( data=True ) :
@@ -35,35 +33,68 @@ def demand_enroute_velocity( lengraph, rategraph, length='length', rate='rate' )
         dist = nx.dijkstra_path_length( lengraph, u, v, weight=length )
         V += curr_rate * dist
     return V
-    
-    
+
+
 def demand_balance_velocity( lengraph, rategraph, length='length', rate='rate' ) :
-    flowgraph, costgraph = obtainWassersteinProblem( lengraph, rategraph, length, rate )
-    FLOW.max_flow_min_cost( flowgraph, costgraph )
-    return FLOW.totalcost( costgraph ).value
+    supplygraph = obtainSupplyGraph( lengraph, rategraph, length, rate )
+    return EarthMoversDistance( lengraph, supplygraph, length )     # weight1 and weight2 are implicit
+    #flowgraph, costgraph = obtainWassersteinProblem( lengraph, rategraph, length, rate )
+    #FLOW.max_flow_min_cost( flowgraph, costgraph )
+    #return FLOW.totalcost( costgraph ).value
 
 
 
 
-def obtainWassersteinProblem( lengraph, rategraph, length='length', rate='rate' ) :
-    digraph = nx.DiGraph()
-    s = Wassnode() ; t = Wassnode()
-    digraph.add_node( s ) ; digraph.add_node( t )
-    
-    for u, v in lengraph.edges_iter() :
-        digraph.add_edge( u, v )
-        
-    for u in rategraph.nodes_iter() :
-        u_supply = rategraph.in_degree( u, rate ) - rategraph.out_degree( u, rate )
-        if u_supply > 0. :
-            digraph.add_edge( s, u, capacity = u_supply )
-        elif u_supply < 0. :
-            digraph.add_edge( u, t, capacity = -u_supply )
-            
-    flowgraph = FLOW.obtainFlowNetwork( digraph, s, t )
+def EarthMoversDistance( lengraph, supplygraph, length='length', weight1='weight1', weight2='weight2' ) :
+    # lengraph is a *non*-multi DiGraph
+    digraph, s, t = FLOW.obtainCapacityNetwork( lengraph, supplygraph, length='length', weight1='weight1', weight2='weight2' )
+    #
+    flowgraph = FLOW.obtainFlowNetwork( digraph, s, t, capacity='capacity' )
     costgraph = FLOW.obtainWeightedCosts( flowgraph, lengraph, weight=length )
     
-    return flowgraph, costgraph
+    # compute optimal flow
+    FLOW.max_flow_min_cost( flowgraph, costgraph )
+    
+    return FLOW.totalcost( costgraph ).value
+    
+
+
+
+def obtainSupplyGraph( lengraph, rategraph, length='length', rate='rate' ) :
+    digraph = nx.DiGraph()
+    for u, u_data in rategraph.nodes_iter( data=True ) :
+        u_supply = rategraph.in_degree( u, rate )
+        u_demand = rategraph.out_degree( u, rate )
+        
+        digraph.add_node( u, weight1=u_supply, weight2=u_demand )
+        
+    # this returns really just a glorified dictionary
+    return digraph
+    
+    
+    
+    
+    
+if False :      # remove soon
+    # do I even do this anymore?
+    def obtainWassersteinProblem( lengraph, rategraph, length='length', rate='rate' ) :
+        digraph = nx.DiGraph()
+        digraph.add_edges_from( lengraph.edges_iter() )
+        
+        for u in rategraph.nodes_iter() :
+            u_supply = rategraph.in_degree( u, rate ) - rategraph.out_degree( u, rate )
+            if u_supply > 0. :
+                digraph.add_edge( s, u, capacity = u_supply )
+            elif u_supply < 0. :
+                digraph.add_edge( u, t, capacity = -u_supply )
+                
+        flowgraph = FLOW.obtainFlowNetwork( digraph, s, t )
+        costgraph = FLOW.obtainWeightedCosts( flowgraph, lengraph, weight=length )
+        
+        return flowgraph, costgraph
+    
+    
+
 
 
 
