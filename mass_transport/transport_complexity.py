@@ -21,7 +21,7 @@ def MoversComplexity( lengraph, rategraph, length='length', rate='rate' ) :
     enroute_cost = demand_enroute_velocity( lengraph, rategraph, length, rate )
     balance_cost = demand_balance_velocity( lengraph, rategraph, length, rate )
     return enroute_cost + balance_cost
-    
+
 
 
 def demand_enroute_velocity( lengraph, rategraph, length='length', rate='rate' ) :
@@ -36,7 +36,7 @@ def demand_enroute_velocity( lengraph, rategraph, length='length', rate='rate' )
 
 
 def demand_balance_velocity( lengraph, rategraph, length='length', rate='rate' ) :
-    supplygraph = obtainSupplyGraph( lengraph, rategraph, length, rate )
+    supplygraph = obtainSupplyGraph( rategraph, rate )
     return EarthMoversDistance( lengraph, supplygraph, length )     # weight1 and weight2 are implicit
     #flowgraph, costgraph = obtainWassersteinProblem( lengraph, rategraph, length, rate )
     #FLOW.max_flow_min_cost( flowgraph, costgraph )
@@ -47,7 +47,7 @@ def demand_balance_velocity( lengraph, rategraph, length='length', rate='rate' )
 
 def EarthMoversDistance( lengraph, supplygraph, length='length', weight1='weight1', weight2='weight2' ) :
     # lengraph is a *non*-multi DiGraph
-    digraph, s, t = FLOW.obtainCapacityNetwork( lengraph, supplygraph, length='length', weight1='weight1', weight2='weight2' )
+    digraph, s, t = FLOW.obtainCapacityNetwork( lengraph, supplygraph, length, weight1, weight2 )
     #
     flowgraph = FLOW.obtainFlowNetwork( digraph, s, t, capacity='capacity' )
     costgraph = FLOW.obtainWeightedCosts( flowgraph, lengraph, weight=length )
@@ -60,13 +60,19 @@ def EarthMoversDistance( lengraph, supplygraph, length='length', weight1='weight
 
 
 
-def obtainSupplyGraph( lengraph, rategraph, length='length', rate='rate' ) :
+def obtainSupplyGraph( rategraph, rate='rate' ) :
     digraph = nx.DiGraph()
     for u, u_data in rategraph.nodes_iter( data=True ) :
         u_supply = rategraph.in_degree( u, rate )
         u_demand = rategraph.out_degree( u, rate )
         
-        digraph.add_node( u, weight1=u_supply, weight2=u_demand )
+        if True :
+            digraph.add_node( u, weight1=u_supply, weight2=u_demand )
+        else :
+            if u_supply > u_demand :
+                digraph.add_node( u, weight1 = u_supply - u_demand )
+            elif u_supply < u_demand :
+                digraph.add_node( u, weight2 = u_demand - u_supply )
         
     # this returns really just a glorified dictionary
     return digraph
