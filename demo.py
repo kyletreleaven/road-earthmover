@@ -8,6 +8,17 @@ import numpy as np
 from scipy.spatial import Delaunay as Tri
 import networkx as nx
 
+import matplotlib as mpl
+mpl.rcParams['ps.useafm'] = True
+mpl.rcParams['pdf.use14corefonts'] = True
+mpl.rcParams['text.usetex'] = True
+
+font = {'family' : 'normal',
+        'weight' : 'bold',
+        'size'   : 22 }
+mpl.rc('font', **font)       # oh please, work!
+
+
 # dev
 import mass_transport
 #
@@ -46,6 +57,38 @@ def stopwatch( func, *args, **kwargs ) :
 
 
 
+def getcomfoy( sizes ) :
+    pass
+
+
+def publishable( fig) :
+    fsize = 25
+    fweight = 'bold'
+    
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 if __name__ == '__main__' :
     import matplotlib.pyplot as plt
@@ -53,11 +96,11 @@ if __name__ == '__main__' :
     
     roadnet = nx.MultiDiGraph()
     
-    if False :
-        roadnet.add_edge( 0, 1, 'N', length=1., weight2=1.)
-        roadnet.add_edge( 1, 2, 'E', length=1., weight1=2., oneway=False )
-        roadnet.add_edge( 2, 3, 'S', length=1., weight1=3.)
-        roadnet.add_edge( 3, 0, 'W', length=1., weight2=4.)
+    if True :
+        roadnet.add_edge( 0, 1, 'N', length=1., weight2=1./5)
+        roadnet.add_edge( 1, 2, 'E', length=1., weight1=2./5, oneway=False )
+        roadnet.add_edge( 2, 3, 'S', length=1., weight1=3./5)
+        roadnet.add_edge( 3, 0, 'W', length=1., weight2=4./5)
         
     elif False :
         OFFSET = 10.
@@ -89,8 +132,8 @@ if __name__ == '__main__' :
         epsilon2 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
         epsilon1 = np.logspace( np.log10(.5), np.log10(1./5), 10 )
     else :          # slow
-        epsilon2 = np.logspace( np.log10(.5), np.log10(1./20), 10 )
-        epsilon1 = np.logspace( np.log10(.5), np.log10(1./10), 10 )
+        epsilon2 = np.logspace( np.log10(.5), np.log10(1./45), 15 )
+        epsilon1 = np.logspace( np.log10(.5), np.log10(1./25), 15 )
 
     """ first, the emd """
     tick = time.time()
@@ -163,22 +206,81 @@ if __name__ == '__main__' :
     mineps = min( min(epsilon1), min(epsilon2) )
     maxeps = max( max(epsilon1), max(epsilon2) )
     interp = np.linspace(mineps,maxeps, 10 )
+    #XLIM = [ 1.1 * mineps, 1.1 * maxeps ]
     #
     nodesline = [ nodes for e in interp ]
     edgesline = [ edges for e in interp ]
     timeline = [ runtime for e in interp ]
     truth = [ emd for e in interp ]
     
+    
+    """ do some plotting """
+    
+    """ plotting convenience function """
+    import matplotlib.ticker
+    
+    def fix_axis( ax ) :
+        #ax.set_xlim( XLIM )
+        ax.invert_xaxis()
+        #ax.tick_params( axis='x', which='both', labelbottom='on' )    # I spent way too long trying to get this shitty function to work!
+        ax.xaxis.set_major_formatter( matplotlib.ticker.ScalarFormatter() )
+        #ax.xaxis.set_minor_formatter( matplotlib.ticker.ScalarFormatter() )
+        ax.yaxis.set_major_formatter( matplotlib.ticker.ScalarFormatter() )
+        #ax.yaxis.set_minor_formatter( matplotlib.ticker.ScalarFormatter() )
+        #ax.relim()
+        #ax.autoscale_view()
+    
+    # resource cost plots
+    # nodes
     plt.figure()
-    plt.loglog( interp, nodesline, epsilon1, nodes1, epsilon2, nodes2, c='b' )
-    plt.loglog( interp, edgesline, epsilon1, edges1, epsilon2, edges2, c='g' )
-    plt.loglog( interp, timeline, epsilon1, runtime1, epsilon2, runtime2, c='k' )
+    plt.loglog( interp, nodesline, label='Exact', c='k' )
+    plt.loglog( epsilon1, nodes1, label='APPROX', c='b', marker='o' )
+    plt.loglog( epsilon2, nodes2, label='PATH', c='g', marker='^' )
+    ax = plt.gca()
+    fix_axis( ax )
+    ax.set_xlabel('Fineness of discretization ($\epsilon$)')
+    ax.set_ylabel('Number of VERTICES generated')
+    ax.legend( fontsize=18 )
+    #plt.savefig( 'nodes-generated.pdf' )
+    
+    # edges
+    plt.figure()
+    plt.loglog( interp, edgesline, label='Exact', c='k' )
+    plt.loglog( epsilon1, edges1, label='APPROX', c='b', marker='o' )
+    plt.loglog( epsilon2, edges2, label='PATH', c='g', marker='^' )
+    ax = plt.gca()
+    fix_axis( ax )
+    ax.set_xlabel('Fineness of discretization ($\epsilon$)')
+    ax.set_ylabel('Number of EDGES generated')
+    ax.legend( fontsize=18 )
+    #plt.savefig( 'edges-generated.pdf' )
+    
+    # runtime
+    plt.figure()
+    plt.loglog( interp, timeline, label='Exact', c='k' )
+    plt.loglog( epsilon1, runtime1, label='APPROX', c='b', marker='o' )
+    plt.loglog( epsilon2, runtime2, label='PATH', c='g', marker='^' )
+    ax = plt.gca()
+    fix_axis( ax )
+    ax.set_xlabel('Fineness of discretization ($\epsilon$)')
+    ax.set_ylabel('Runtime (sec)')
+    ax.legend( fontsize=18 )
+    #plt.savefig( 'runtime.pdf' )
+    
     
     """ show closeness of approximation and convergence """
     plt.figure()
-    plt.semilogx( interp, truth, 'k--' )
-    plt.semilogx( epsilon1, lowerbound1, epsilon2, lowerbound2, c='b' )
-    plt.semilogx( epsilon1, upperbound1, epsilon2, upperbound2, c='r' )
+    plt.semilogx( interp, truth, label='Exact', c='k' )
+    plt.semilogx( epsilon1, lowerbound1, c='b', marker='o', label='APPROX' )
+    plt.semilogx( epsilon1, upperbound1, c='b', marker='o' )
+    plt.semilogx( epsilon2, lowerbound2, c='g', marker='^', label='PATH' )
+    plt.semilogx( epsilon2, upperbound2, c='g', marker='^' )
+    ax = plt.gca()
+    fix_axis( ax )
+    ax.set_xlabel('Fineness of discretization ($\epsilon$)')
+    ax.set_ylabel('Closeness of approximation')
+    ax.legend( fontsize=18 )
+    #plt.savefig( 'convergence-in-approx.pdf' )
     
     
     
