@@ -10,6 +10,11 @@ class Vehicle :
     def __init__(self) :
         self.ready = Signal()
         self.odometer = 0.
+        self.odometer_full = 0.
+        self.odometer_empty = 0.
+        
+        self.mylog = []
+        self.notches = 0
         
     def set_environment(self, f_dist ) :
         self.f_dist = f_dist
@@ -24,11 +29,22 @@ class Vehicle :
         self.sim = sim
         self.sim.schedule( self.ready_at )
         
+    def log_timefull( self, time ) :
+        self.odometer_full += time
+        self.odometer += time
+        
+    def log_timeempty( self, time ) :
+        self.odometer_empty += time
+        self.odometer += time
+
+        
     """ signaloid """
     def ready_at(self) : self.ready( self.location )
     
     """ slot """
     def receive_demand(self, demand ) :
+        self.mylog.append( demand )
+        
         p, q = demand
         time = self.sim.get_time()
         if True : 
@@ -46,7 +62,7 @@ class Vehicle :
     """ auto slot """
     def arrived_at_pickup(self) :
         time = self.sim.get_time()
-        self.odometer += self.next_dist
+        self.log_timeempty( self.next_dist )
         self.location = self.pick
         if DEBUG : print 'arrived to pickup at %f' % time
         
@@ -61,10 +77,12 @@ class Vehicle :
     """ auto slot """
     def delivered(self) :
         time = self.sim.get_time()
-        self.odometer += self.next_dist
+        self.log_timefull( self.next_dist )
         self.location = self.delv
         time = self.sim.get_time()
         if DEBUG : print 'delivered at %f' % time
+        
+        self.notches = self.notches + 1
         
         self.ready_at()
 
