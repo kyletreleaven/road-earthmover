@@ -91,27 +91,35 @@ if __name__ == '__main__' :
     
     #roadnet, rates = get_sim_setting()
     """ SIM PARAMETERS """
-    if False :
+    if True :
         roadnet = testcases.RoadnetExamples.get( 'nesw' )
         roadset = [ road for _,__,road in roadnet.edges_iter( keys=True ) ]
         
         normrategraph = nx.DiGraph()
         # is it a "true zero" issue?
-        for road1, road2 in itertools.product( roadset, roadset ) :
-            normrategraph.add_edge( road1, road2, rate=.001 )
+        if False :
+            for road1, road2 in itertools.product( roadset, roadset ) :
+                normrategraph.add_edge( road1, road2, rate=.001 )
         # add the meaningful rates
         normrategraph.add_edge( 'N', 'E', rate=1./5 )
         normrategraph.add_edge( 'W', 'E', rate=1./5 )
         normrategraph.add_edge( 'W', 'S', rate=3./5 )
     
-    else :
+    elif False :
         roadnet = roadprob.sampleroadnet()
         normrategraph = massprob.sample_rategraph( roadnet, normalize=True )
         
-    numveh = 4      # DEBUG: for some reason, multiple vehicles is a no-no?!?
+    else :
+        roadnet = nx.MultiDiGraph()
+        roadnet.add_edge( 0,1, 'LEFT', length=1. )
+        roadnet.add_edge( 1,2, 'RIGHT', length=1. )
+        normrategraph = nx.DiGraph()
+        normrategraph.add_edge( 'LEFT', 'RIGHT', rate=1. )
+        
+    numveh = 1      # DEBUG: for some reason, multiple vehicles is a no-no?!?
     vehspeed = 1.
     
-    horizon = 1000.
+    horizon = 10000.
         
     """ end parameters """
         
@@ -121,9 +129,14 @@ if __name__ == '__main__' :
 
     # Note: rates sum to 1.
     # compute necessary "service velocity"
+    demvel_enroute = road_complexity.demand_enroute_velocity( roadnet, normrategraph )
+    demvel_balance = road_complexity.demand_balance_velocity( roadnet, normrategraph )
+    #
     MM = road_complexity.MoversComplexity( roadnet, normrategraph )
     max_rate = numveh * vehspeed / MM
-    arrivalrate = max_rate + 1.      # having some issues right now
+    #arrivalrate = max_rate * 1. + 1.
+    #arrivalrate = max_rate * .99 + 0.
+    arrivalrate = max_rate * 1. + .1
     
     rategraph = nx.DiGraph()
     for r1, r2, data in normrategraph.edges_iter( data=True ) :
@@ -140,7 +153,7 @@ if __name__ == '__main__' :
     # construct the simulation blocks
     from simulation import Simulation
     from sources import RoadnetDemandSource
-    from queues import NNeighDispatcher
+    from queues import GatedQueue, BatchNNeighDispatcher 
     from servers import Vehicle
     
     sim = Simulation()
@@ -148,8 +161,11 @@ if __name__ == '__main__' :
     source = RoadnetDemandSource( roadnet, rategraph )
     source.join_sim( sim )
     
+    gate = GatedQueue()
+    gate.join_sim( sim )
     
-    dispatch = NNeighDispatcher()
+    dispatch = BatchNNeighDispatcher()
+    # dispatch = NNeighDispatcher()
     dispatch.set_environment( roadnet )
     dispatch.join_sim( sim )
     
@@ -159,7 +175,7 @@ if __name__ == '__main__' :
     for road1, road2, rate_data in normrategraph.edges_iter( data=True ) :
         distr[(road1,road2)] = rate_data.get( 'rate', 0. )
     bonus_demands = [ roadprob.samplepair( roadnet, distr ) for i in range(preload) ]
-    for p, q in bonus_demands : dispatch.demand_arrived( (p,q), p )
+    for p, q in bonus_demands : gate.demand_arrived( (p,q) )
     """ end cheats """
     
     vehicles = {}
@@ -172,13 +188,6 @@ if __name__ == '__main__' :
         veh.join_sim( sim )
     
     # connect components in simulation schematic
-    """ signal connections """
-    for veh in vehicles :
-        vehconn = dispatch.spawn_interface() ; vehicles[veh] = vehconn
-        veh.ready.connect( vehconn.request_in )
-        #veh.ready.connect( vehconn.request_in )
-        vehconn.demand_out.connect( veh.receive_demand )
-    
     """ source output connections """    
     # report demand arrivals to several places
     ALL_DEMANDS = []
@@ -188,7 +197,8 @@ if __name__ == '__main__' :
     def give_to_dispatch( dem ) :
         p, q = dem
         loc = p
-        dispatch.demand_arrived( dem, loc )
+        #dispatch.demand_arrived( dem, loc )
+        gate.demand_arrived( dem )
         
     source_out = source.source()
     #source_out.connect( counting.increment )
@@ -208,9 +218,21 @@ if __name__ == '__main__' :
         
     source_out.connect( say )
     
+    gate_if = gate.spawn_interface()
+    dispatch.request_batch.connect( gate_if.request_in )
+    gate_if.batch_out.connect( dispatch.batch_arrived )
+    
+    """ vehicle signal connections """
+    for veh in vehicles :
+        vehconn = dispatch.spawn_interface() ; vehicles[veh] = vehconn
+        veh.ready.connect( vehconn.request_in )
+        #veh.ready.connect( vehconn.request_in )
+        vehconn.demand_out.connect( veh.receive_demand )
+
+    
     record_interval = 1.
     recorder = UniformPoller( record_interval )
-    unserviced_query = lambda : len( dispatch.demands )
+    unserviced_query = lambda : len( gate.demands ) + len( dispatch.demands )
     recorder.set_query( unserviced_query )
     recorder.join_sim( sim )
     
@@ -227,12 +249,19 @@ if __name__ == '__main__' :
     nleft = len( dispatch.demands )
     print 'arrival rate (simulated, observed): %f, %f' % ( arrivalrate, total_demands / horizon )
     
-    overrate_est = float( nleft - preload ) / horizon
+    #overrate_est = float( nleft - preload ) / horizon
+    take_only_last = int( .25 * horizon )
+    overrate_est = float( recorder.tape[-1] - recorder.tape[-take_only_last] ) / take_only_last
+    overrate_est = float( recorder.tape[-1] ) / horizon
     max_rate_observed = arrivalrate - overrate_est
     
     if nleft >= 0 : 
         print 'max sustainable rate (observed): %f' % max_rate_observed
     print 'max sustainable rate (predicted): %f' % max_rate
+    
+    print 'cost per demand (predicted): %f' % ( demvel_enroute + demvel_balance )
+    print 'cost per demand (observed): %f' % ( veh.odometer / veh.notches )
+    
     
     DEMS = {}
     for dem in ALL_DEMANDS :
@@ -250,6 +279,12 @@ if __name__ == '__main__' :
     (slope,intercept) = sp.polyfit( time_axis, recorder.tape, 1 )
     
     
+    #
+    Ed_computed = road_complexity.demand_enroute_velocity( roadnet, normrategraph )
+    #EMD_domain_knowledge = 31./6 / 5
+    #MMM = Ed_computed + EMD_domain_knowledge
+    #max_rate_domain_knowledge = numveh * vehspeed / MMM
+    #print 'max rate (domain knowledge): %f' % max_rate_domain_knowledge
     
     
     if False :
