@@ -6,6 +6,17 @@ import random
 # science common
 import numpy as np
 import scipy as sp
+
+import matplotlib as mpl
+mpl.rcParams['ps.useafm'] = True
+mpl.rcParams['pdf.use14corefonts'] = True
+mpl.rcParams['text.usetex'] = True
+
+font = {'family' : 'normal',
+        'weight' : 'bold',
+        'size'   : 22 }
+mpl.rc('font', **font)       # oh please, work!
+
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -91,8 +102,10 @@ if __name__ == '__main__' :
     
     #roadnet, rates = get_sim_setting()
     """ SIM PARAMETERS """
-    if True :
+    if False :
         roadnet = testcases.RoadnetExamples.get( 'nesw' )
+        for _,__,road, data in roadnet.edges_iter( keys=True, data=True ) :
+            data['length'] = 5.
         roadset = [ road for _,__,road in roadnet.edges_iter( keys=True ) ]
         
         normrategraph = nx.DiGraph()
@@ -105,7 +118,7 @@ if __name__ == '__main__' :
         normrategraph.add_edge( 'W', 'E', rate=1./5 )
         normrategraph.add_edge( 'W', 'S', rate=3./5 )
     
-    elif False :
+    elif True :
         roadnet = roadprob.sampleroadnet()
         normrategraph = massprob.sample_rategraph( roadnet, normalize=True )
         
@@ -136,15 +149,12 @@ if __name__ == '__main__' :
     max_rate = numveh * vehspeed / MM
     #arrivalrate = max_rate * 1. + 1.
     #arrivalrate = max_rate * .99 + 0.
-    arrivalrate = max_rate * 1. + .1
+    arrivalrate = max_rate + 0.1    #* 1.02
     
     rategraph = nx.DiGraph()
     for r1, r2, data in normrategraph.edges_iter( data=True ) :
         rategraph.add_edge( r1, r2, rate=arrivalrate * data.get('rate') )
-
-
-
-    
+        
     """ end derived parameters """
     
     
@@ -235,6 +245,13 @@ if __name__ == '__main__' :
     unserviced_query = lambda : len( gate.demands ) + len( dispatch.demands )
     recorder.set_query( unserviced_query )
     recorder.join_sim( sim )
+    
+    def display() :
+        n = len( recorder.tape )
+        T = record_interval * np.arange( n )
+        plt.plot( T, recorder.tape )
+        plt.xlabel( 'Time elapsed' )
+        plt.ylabel( 'Number of Demands Waiting' )
     
     
     """ run the simulation """
