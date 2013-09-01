@@ -93,6 +93,7 @@ def get_sim_setting( N=10, p=.3, mu=1., K=5, lam=1. ) :
     return roadnet, rates
 
 
+
 def totalrate( rategraph, rate='rate' ) :
     totalrate = 0.
     for _,__, data in rategraph.edges_iter( data=True ) :
@@ -106,6 +107,14 @@ def scale_rates( rategraph, alpha, rate='rate' ) :
         res.add_edge( u, v, { rate : alpha * r } )
     return res
 
+def moverscomplexity( roadnet, n_rategraph, length='length', rate='rate' ) :
+    miles_per_dem = road_complexity.MoversComplexity( roadnet, n_rategraph, length='length', rate='rate' )
+    return miles_per_dem
+
+def convert_complexity_and_servicerate( arg, sys_speed ) :
+    return float( sys_speed ) / arg
+    
+    
 
 """ simulation-based network tester """
 class RoadmapEMD(object) :
@@ -113,22 +122,11 @@ class RoadmapEMD(object) :
         self.vehspeed = 1.
         self.horizon = 500.
         
-        
-    def scenario(self, roadnet, rategraph ) :
+    def scenario(self, roadnet, rategraph, numveh=1, vehspeed=1. ) :
         self.roadnet = roadnet
         self.rategraph = rategraph
-        
-        # Note: rates sum to 1.
-        # compute necessary "service velocity"
-        demvel_enroute = road_complexity.demand_enroute_velocity( roadnet, rategraph )
-        demvel_balance = road_complexity.demand_balance_velocity( roadnet, rategraph )
-        MM = road_complexity.MoversComplexity( roadnet, rategraph )
-        self.complexity = MM
-        
-        #assert demvel_enroute + demvel_balance == MM
-        print demvel_enroute + demvel_balance, MM
-        self.numveh = int( np.floor( MM / self.vehspeed ) )
-        
+        self.numveh = numveh
+        self.vehspeed = vehspeed
         
     def distance(self, p, q ) :
         return ROAD.distance( self.roadnet, p, q, 'length' )
@@ -251,7 +249,7 @@ class RoadmapEMD(object) :
         plt.ylabel( 'Number of Demands Waiting' )
         
         
-    def compute_statistic(self) :
+    def rate_observed(self) :
         # convenience
         horizon = self.horizon
         recorder = self.recorder
@@ -269,43 +267,9 @@ class RoadmapEMD(object) :
         DY = float( recorder.tape[-1] - recorder.tape[-take_num] )
         DT = take_num * recorder.T
         overrate_est = float( DY ) / DT
-        max_rate_observed = arrivalrate - overrate_est
+        rate_observed = arrivalrate - overrate_est
         
-        miles_per_demand = self.complexity / arrivalrate
-        max_rate = self.numveh * self.vehspeed / miles_per_demand
-        
-        if nleft >= 0 : 
-            print 'max sustainable rate (observed): %f' % max_rate_observed
-        print 'max sustainable rate (predicted): %f' % max_rate
-        
-        miles_per_demand_observed = self.vehspeed * self.numveh / max_rate_observed
-        complexity_est = arrivalrate * miles_per_demand_observed
-        return ( self.complexity, complexity_est )
-    
-    
-        #print 'cost per demand (predicted): %f' % ( self.complexity / arrivalrate )
-        #print 'cost per demand (observed): %f' % ( veh.odometer / veh.notches )
-        if False :
-            DEMS = {}
-            for dem in ALL_DEMANDS :
-                p, q = dem
-                road1 = p.road
-                road2 = q.road
-                row = DEMS.setdefault( (road1,road2), [] )
-                row.append( dem )
-                
-            empirical_distr = [ ( key, len( val ) / horizon ) for key, val in DEMS.items() ]
-        
-        num_steps = len( recorder.tape )
-        time_axis = recorder.T * np.arange( num_steps )
-        (slope,intercept) = sp.polyfit( time_axis, recorder.tape, 1 )
-        
-        if False :
-            # do matching-based checking
-            T = 1.
-            demands = mcplx.sample_demands( T, normrategraph, roadnet )
-            min_total_velocity = mcplx.enroute_cost( demands, roadnet ) / T + mcplx.balance_cost( demands, roadnet ) / T
-            print 'empirical expected max rate: %f' % ( 1. / min_total_velocity )
+        return rate_observed
 
 
 
@@ -361,23 +325,39 @@ if __name__ == '__main__' :
         
 
     probe = RoadmapEMD()
-    probe.horizon = 1000.
+    probe.horizon = 2000.
     
     complexity_computed = []
     complexity_estimated = []
-    for t in range(10) :
+    for t in range(20) :
         roadnet, rategraph = get_sim_setting()
-        probe.scenario( roadnet, rategraph )
-        probe.sim_init()
-        probe.run_sim()
-        a, b  = probe.compute_statistic()
-        #probe.display()
-        #plt.show()
         
-        complexity_computed.append( a )
-        complexity_estimated.append( b )
-    
-    
-    
+        R = totalrate( rategraph )
+        n_rategraph = scale_rates( rategraph, 1. / R )
+        
+        complexity = moverscomplexity( roadnet, n_rategraph )
+        
+        for k in range(1) :
+            numveh = np.random.randint(1,5+1)
+            
+            rate_predicted = convert_complexity_and_servicerate( complexity, numveh )
+            simrates = scale_rates( n_rategraph, rate_predicted + .1 )
+            
+            probe.scenario( roadnet, simrates, numveh, 1. )
+            
+            probe.sim_init()
+            probe.run_sim()
+            rate_observed = probe.rate_observed()
+            
+            complexity_observed = convert_complexity_and_servicerate( rate_observed, numveh )
+            
+            complexity_computed.append( complexity )
+            complexity_estimated.append( complexity_observed )
+        
+    def showresults() :
+        plt.scatter( complexity_computed, complexity_estimated )
+        
+    showresults()
+    plt.show()
     
     
