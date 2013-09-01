@@ -95,11 +95,16 @@ def get_sim_setting( N=10, p=.3, mu=1., K=5, lam=1. ) :
 
 def totalrate( rategraph, rate='rate' ) :
     totalrate = 0.
-    for _,__, data in rategraph.edges( data=True ) :
+    for _,__, data in rategraph.edges_iter( data=True ) :
         totalrate += data.get( rate, 0. )
     return totalrate
 
-
+def scale_rates( rategraph, alpha, rate='rate' ) :
+    res = nx.DiGraph()
+    for u,v, data in rategraph.edges_iter( data=True ) :
+        r = data.get( rate, 0. )
+        res.add_edge( u, v, { rate : alpha * r } )
+    return res
 
 
 """ simulation-based network tester """
