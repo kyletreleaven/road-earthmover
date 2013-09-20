@@ -275,6 +275,8 @@ class RoadmapEMD(object) :
 
 
 if __name__ == '__main__' :
+    import pickle
+    
     # plotting
     import matplotlib as mpl
     mpl.rcParams['ps.useafm'] = True
@@ -285,7 +287,6 @@ if __name__ == '__main__' :
             'weight' : 'bold',
             'size'   : 22 }
     mpl.rc('font', **font)       # oh please, work!
-    
     import matplotlib.pyplot as plt
     plt.close('all')
     
@@ -341,7 +342,7 @@ if __name__ == '__main__' :
             numveh = np.random.randint(1,5+1)
             
             rate_predicted = convert_complexity_and_servicerate( complexity, numveh )
-            simrates = scale_rates( n_rategraph, rate_predicted + .1 )
+            simrates = scale_rates( n_rategraph, 2. * rate_predicted )
             
             probe.scenario( roadnet, simrates, numveh, 1. )
             
@@ -360,4 +361,10 @@ if __name__ == '__main__' :
     showresults()
     plt.show()
     
-    
+    def saveresult( filename ) :
+        data = {}
+        data['complexity_estimated'] = complexity_estimated
+        data['complexity_computed'] = complexity_computed
+        
+        pickle.dump( data, open( filename, 'w' ) )
+        
