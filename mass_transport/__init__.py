@@ -22,6 +22,7 @@ for dir in os.listdir( git_sub_modules_abs ) :
 import roadgeometry
 import nxopt
 import polyglint2d
+import bpmatch_roads
 
 
 import road_Ed

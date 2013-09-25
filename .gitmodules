@@ -7,3 +7,6 @@
 [submodule "mass_transport/packages/nxopt"]
 	path = mass_transport/packages/nxopt
 	url = https://github.com/kyletreleaven/network-optimization.git
+[submodule "mass_transport/packages/bpmatch_roads"]
+	path = mass_transport/packages/bpmatch_roads
+	url = https://github.com/kyletreleaven/roadgeometry-matching.git
