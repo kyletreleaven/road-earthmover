@@ -16,9 +16,8 @@ import mass_transport
 import mass_transport.tests.testcases as testcases
 import mass_transport.probability as massprob
 
-from mass_transport import road_complexity
+from mass_transport import road_Ed, roademd, road_complexity
 import mass_transport.road_complexity as mcplx
-
 
 # roadmap framework
 import roadgeometry.roadmap_basic as ROAD
@@ -27,11 +26,16 @@ import roadgeometry.probability as roadprob
 
 # simulation framework
 from simulation import Simulation
-from sources import RoadnetDemandSource
+from sources import RoadnetDemandSource, ScriptSource
 from queues import GatedQueue, BatchNNeighDispatcher
 from servers import Vehicle
 
 class data : pass
+
+
+def debug_input() :
+    if False : return raw_input()
+
 
 
 """ simulation object definitions """
@@ -107,6 +111,58 @@ def scale_rates( rategraph, alpha, rate='rate' ) :
         res.add_edge( u, v, { rate : alpha * r } )
     return res
 
+class demand :
+    def __init__(self, p, q ) :
+        self.pick = p
+        self.delv = q
+
+def sample_demands( T, rategraph, roadnet, rate='rate' ) :
+    demands = []
+    point_on = lambda road : roadprob.sample_onroad( road, roadnet, 'length' )
+    for road1, road2, data in rategraph.edges_iter( data=True ) :
+        n = np.random.poisson( data.get( rate, 0. ) * T )
+        #newdems = [ demand( point_on( road1 ), point_on( road2 ) ) for i in range(n) ]
+        newdems = [ ( point_on( road1 ), point_on( road2 ) ) for i in range(n) ]
+        demands.extend( newdems )
+        
+    numdem = len( demands )
+    print 'sampled %d' % numdem
+    debug_input()
+    
+    times = T * np.random.rand(numdem)
+    script = sorted( zip( times, demands ) )
+    return script
+    #return demands
+
+def demand_enroute_velocity( roadnet, rategraph, length='length', rate='rate' ) :
+    """
+    TODO: implement node <-> object checking
+    """
+    V = {}
+    for road1, road2, data in rategraph.edges_iter( data=True ) :
+        curr_rate = data.get( rate )
+        if curr_rate is None : continue
+        curr_v = curr_rate * road_Ed.roadEd_conditional( roadnet, road1, road2, length )
+        V[ (road1,road2) ] = curr_v
+        
+    return sum( V.values() )
+
+def demand_balance_velocity( roadnet, rategraph, length='length', rate='rate' ) :
+    computeImbalance( roadnet, rategraph, rate )
+    return roademd.EarthMoversDistance( roadnet, length )
+
+def computeImbalance( roadnet, rategraph, rate='rate' ) :
+    for road in rategraph.nodes_iter() :
+        supply = rategraph.in_degree( road, rate ) - rategraph.out_degree( road, rate )
+        _, road_data = ROAD.obtain_edge( roadnet, road, True )
+        if supply > 0. :
+            road_data['weight1'] = supply
+        elif supply < 0. :
+            road_data['weight2'] = -supply
+
+
+
+
 def moverscomplexity( roadnet, n_rategraph, length='length', rate='rate' ) :
     miles_per_dem = road_complexity.MoversComplexity( roadnet, n_rategraph, length='length', rate='rate' )
     return miles_per_dem
@@ -120,7 +176,7 @@ def convert_complexity_and_servicerate( arg, sys_speed ) :
 class RoadmapEMD(object) :
     def __init__(self) :
         self.vehspeed = 1.
-        self.horizon = 500.
+        #self.horizon = 500.
         
     def scenario(self, roadnet, rategraph, numveh=1, vehspeed=1. ) :
         self.roadnet = roadnet
@@ -138,7 +194,14 @@ class RoadmapEMD(object) :
         sim = Simulation()
         self.sim = sim
         
-        source = RoadnetDemandSource( self.roadnet, self.rategraph )
+        if False :
+            script = sample_demands( self.horizon, self.rategraph, self.roadnet )
+            source = ScriptSource( script )
+            print 'obtained %d demands' % len( source.script )
+            debug_input()
+        else :
+            source = RoadnetDemandSource( self.roadnet, self.rategraph )
+            
         self.source = source
         source.join_sim( sim )
         
@@ -261,13 +324,17 @@ class RoadmapEMD(object) :
         
         print 'arrival rate (simulated, observed): %f, %f' % ( arrivalrate, total_demands / horizon )
         
-        #overrate_est = float( nleft - preload ) / horizon
-        take_only_last = .25 * horizon
-        take_num = int( np.ceil( take_only_last / recorder.T ) )
-        DY = float( recorder.tape[-1] - recorder.tape[-take_num] )
-        DT = take_num * recorder.T
-        overrate_est = float( DY ) / DT
-        rate_observed = arrivalrate - overrate_est
+        if True :
+            # see what this does
+            rate_observed = sum([ veh.notches for veh in self.vehicles ]) / self.horizon
+        else :
+            #overrate_est = float( nleft - preload ) / horizon
+            take_only_last = .25 * horizon
+            take_num = int( np.ceil( take_only_last / recorder.T ) )
+            DY = float( recorder.tape[-1] - recorder.tape[-take_num] )
+            DT = take_num * recorder.T
+            overrate_est = float( DY ) / DT
+            rate_observed = arrivalrate - overrate_est
         
         return rate_observed
 
@@ -326,17 +393,25 @@ if __name__ == '__main__' :
         
 
     probe = RoadmapEMD()
-    probe.horizon = 2000.
+    probe.horizon = 1000.
     
     complexity_computed = []
     complexity_estimated = []
-    for t in range(20) :
-        roadnet, rategraph = get_sim_setting()
+    
+    def showresults() :
+        plt.scatter( complexity_computed, complexity_estimated )
+        
+    for t in range(10) :
+        roadnet, rategraph = get_sim_setting( mu=2. )
         
         R = totalrate( rategraph )
         n_rategraph = scale_rates( rategraph, 1. / R )
         
-        complexity = moverscomplexity( roadnet, n_rategraph )
+        enroute_velocity = demand_enroute_velocity( roadnet, n_rategraph )
+        balance_velocity = demand_balance_velocity( roadnet, n_rategraph )
+        complexity = enroute_velocity + balance_velocity
+        #complexity = moverscomplexity( roadnet, n_rategraph )
+        
         
         for k in range(1) :
             numveh = np.random.randint(1,5+1)
@@ -355,8 +430,6 @@ if __name__ == '__main__' :
             complexity_computed.append( complexity )
             complexity_estimated.append( complexity_observed )
         
-    def showresults() :
-        plt.scatter( complexity_computed, complexity_estimated )
         
     showresults()
     plt.show()

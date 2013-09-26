@@ -33,6 +33,45 @@ class PoissonClock(object) :
 
 
 
+class ScriptSource(object) :
+    def __init__(self, script ) :
+        self.script = script
+        self.next_time = 0.
+        self.iter = ( item for item in self.script )
+        
+        self.output = Signal()
+        
+    def _reschedule(self) :
+        try :
+            curr_time = self.next_time
+            t, out = self.iter.next()
+            
+            self.next_demand = out
+            self.next_time = t
+            self.sim.schedule( self.emit, t - curr_time )
+            
+        except StopIteration :
+            return
+        
+        
+    def join_sim(self, sim ) :
+        self.sim = sim
+        self._reschedule()
+        
+    """ auto slotoid """
+    def emit( self ) :
+        self.output( self.next_demand )
+        self._reschedule()
+        
+    def source(self) : return self.output
+
+
+
+
+
+
+
+
 class RoadnetDemandSource(object) :
     def __init__(self, roadnet, rategraph, length_key='length', rate_key='rate' ) :
         self.roadnet = roadnet
