@@ -2,8 +2,8 @@
 import numpy as np
 import networkx as nx
 
-import mass_transport
-import roadgeometry.roadmap_basic as ROAD
+import setiptah.roadgeometry.roadmap_basic as ROAD
+#import roadgeometry.roadmap_basic as ROAD
 
 
 def sample_rategraph( roadnet, rate='rate', normalize=False ) :
