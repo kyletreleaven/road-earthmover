@@ -10,12 +10,13 @@ import networkx as nx
 import sympy
 
 
-""" my dev """
+""" setiptah dependencies """
 #import polyglint2d.polyglint2d as pglint
-import roadgeometry.roadmap_basic as ROAD
-import roadgeometry.probability as ROADRAND
-import polyglint2d.polyglint2d as pglint
+import setiptah.roadgeometry.roadmap_basic as ROAD
+import setiptah.polyglint2d as pglint
 
+""" local dependencies """
+import probability as roadprob
 
 
 
@@ -234,7 +235,7 @@ def roadEd( roadnet, distr1, distr2=None, length_attr='length' ) :
 
 
 
-
+""" self test """
 if __name__ == '__main__' :
     import random
     
@@ -281,7 +282,7 @@ if __name__ == '__main__' :
         Ed = roadEd( roadnet, distr, length_attr='length' )
         print 'Ed computed %f' % Ed
         
-        pairs = [ ROADRAND.samplepair( roadnet, distr ) for i in range(20000) ]
+        pairs = [ roadprob.samplepair( roadnet, distr ) for i in range(20000) ]
         dst = [ ROAD.distance( roadnet, p, q, 'length' ) for p,q in pairs ]
         Ed_emp = np.mean( dst )
         print 'Ed empirical %f' % Ed_emp
