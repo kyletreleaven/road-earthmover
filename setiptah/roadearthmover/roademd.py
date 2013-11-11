@@ -1,14 +1,17 @@
 
+# common
 import itertools
 
+# science common
+import numpy as np
 import networkx as nx
+
+# science "common"; should eventually remove this crutch
 import cvxpy
 
-import numpy as np
-
-import roadgeometry.roadmap_basic as roadmap_basic
-#import nxopt.nxopt as nxopt    # deprecate!
-import nxopt.max_flow_min_cost as flownets 
+# setiptah dependencies
+import setiptah.roadgeometry.roadmap_basic as roadmap_basic
+import setiptah.nxopt.max_flow_min_cost as flownets
 
 
 """ utilities """

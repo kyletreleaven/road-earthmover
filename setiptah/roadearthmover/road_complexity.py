@@ -1,20 +1,19 @@
 
+# common
 import itertools
 import random
 
+# science common
 import numpy as np
 import networkx as nx
 
 import matplotlib.pyplot as plt
 
-#import road_Ed, roademd
-#import nxopt.max_flow_min_cost as FLOW
+# setiptah dependencies
+import setiptah.roadgeometry.roadmap_basic as ROAD
+import setiptah.roadgeometry.probability as roadprob
 
-import mass_transport       # loads the relevant path, too hacky... should fix this
-
-import roadgeometry.roadmap_basic as ROAD
-import roadgeometry.probability as roadprob
-
+# local dependencies
 import road_Ed, roademd
 
 
@@ -105,6 +104,7 @@ def balance_cost( demands, roadnet ) :
 
 
 
+""" self test """
 if __name__ == '__main__' :
     
     # make a random roadnet
@@ -127,7 +127,7 @@ if __name__ == '__main__' :
     print enroute_velocity, balance_velocity
     
     if True :
-        T = 1.
+        T = .5
         DEMANDS = sample_demands( T, rategraph, roadnet )
         
         mean_enroute = enroute_cost( DEMANDS, roadnet ) / T
