@@ -31,9 +31,10 @@ import setiptah.roadgeometry.probability as roadprob
 
 # simulation framework
 from setiptah.eventsim.simulation import Simulation
-from sources import RoadnetDemandSource, ScriptSource
-from queues import GatedQueue, BatchNNeighDispatcher
-from servers import Vehicle
+from setiptah.roadearthmover.simulation.sources import RoadnetDemandSource, ScriptSource
+from setiptah.roadearthmover.simulation.queues import GatedQueue, BatchNNeighDispatcher
+from setiptah.roadearthmover.simulation.servers import Vehicle
+
 
 class data : pass
 
