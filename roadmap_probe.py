@@ -31,8 +31,12 @@ import setiptah.roadgeometry.probability as roadprob
 
 # simulation framework
 from setiptah.eventsim.simulation import Simulation
-from setiptah.roadearthmover.simulation.sources import RoadnetDemandSource, ScriptSource
-from setiptah.roadearthmover.simulation.queues import GatedQueue, BatchNNeighDispatcher
+#
+from setiptah.queuesim.queues import GatedQueue
+from setiptah.queuesim.sources import PoissonClock, ScriptSource
+#
+from setiptah.roadearthmover.simulation.sources import RoadnetDemandSource
+from setiptah.roadearthmover.simulation.queues import BatchNNeighDispatcher
 from setiptah.roadearthmover.simulation.servers import Vehicle
 
 
@@ -211,7 +215,7 @@ class RoadmapEMD(object) :
         self.source = source
         source.join_sim( sim )
         
-        gate = GatedQueue()
+        gate = GatedQueue() # because nearest neighbor "cheats" if the arrival rate is too high
         self.gate = gate
         gate.join_sim( sim )
         
