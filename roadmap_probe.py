@@ -33,7 +33,7 @@ import setiptah.roadgeometry.probability as roadprob
 from setiptah.eventsim.simulation import Simulation
 #
 from setiptah.queuesim.queues import GatedQueue
-from setiptah.queuesim.sources import PoissonClock, ScriptSource
+from setiptah.queuesim.sources import UniformClock, PoissonClock, ScriptSource
 #
 from setiptah.roadearthmover.simulation.sources import RoadnetDemandSource
 from setiptah.roadearthmover.simulation.queues import BatchNNeighDispatcher
@@ -47,28 +47,6 @@ def debug_input() :
     if False : return raw_input()
 
 
-
-""" simulation object definitions """
-
-class UniformPoller :
-    def __init__(self, T ) :
-        self.T = T
-        self._counter = itertools.count()
-        
-        self.tape = []
-        
-    def set_query(self, callback ) :
-        self.callback = callback
-        
-    def join_sim(self, sim ) :
-        self.sim = sim
-        self.sim.schedule( self.tick )
-        
-    """ auto slot """
-    def tick(self) :
-        res = self.callback()
-        self.tape.append( res )
-        self.sim.schedule( self.tick, self.T )
 
 
 """ convenient constructors """
@@ -243,13 +221,15 @@ class RoadmapEMD(object) :
             veh.set_location( randpoint )
             veh.join_sim( sim )
         
-        # make a recorder
-        recorder = UniformPoller( 1. )
-        self.recorder = recorder
-        def unassigned_query() :
-            return len( self.gate.demands ) + len( self.dispatch.demands )
-        recorder.set_query( unassigned_query )
+        # record number of unassigned demands
+        self.tape = []
+        def record_unassigned() :
+            unassg = len( self.gate._queue ) + len( self.dispatch.demands )
+            self.tape.append( unassg )
+        recorder = UniformClock( 1. )
         recorder.join_sim( sim )
+        recorder.output.connect( record_unassigned )
+        self.recorder = recorder
         
         # report demand arrivals to several places
         self.DEMANDS = []
@@ -260,7 +240,7 @@ class RoadmapEMD(object) :
             p, q = dem
             loc = p
             #dispatch.demand_arrived( dem, loc )
-            self.gate.demand_arrived( dem )
+            self.gate.arrival( dem )
             
         source_out = source.source()
         #source_out.connect( counting.increment )
@@ -284,11 +264,12 @@ class RoadmapEMD(object) :
             print "need a batch!!"
             
         # creates an interface from gate to interactive dispatcher
-        gate_if = gate.spawn_interface()
-        self.gate_if = gate_if
-        dispatch.request_batch.connect( gate_if.request_in )
+        #gate_if = gate.spawn_interface()
+        #self.gate_if = gate_if
+        dispatch.request_batch.connect( gate.requestRelease )
         dispatch.request_batch.connect( gimme )
-        gate_if.batch_out.connect( dispatch.batch_arrived )
+        gate.output.connect( dispatch.batch_arrived )
+        #gate_if.batch_out.connect( dispatch.batch_arrived )
         
         def hello( *args, **kwargs ) :
             print 'vehicle is ready!'
@@ -315,9 +296,9 @@ class RoadmapEMD(object) :
     """ after the simulation """
     def display(self) :
         recorder = self.recorder
-        n = len( recorder.tape )
+        n = len( self.tape )
         T = recorder.T * np.arange( n )
-        plt.plot( T, recorder.tape )
+        plt.plot( T, self.tape )
         plt.xlabel( 'Time elapsed' )
         plt.ylabel( 'Number of Demands Waiting' )
         
@@ -341,7 +322,7 @@ class RoadmapEMD(object) :
             #overrate_est = float( nleft - preload ) / horizon
             take_only_last = .25 * horizon
             take_num = int( np.ceil( take_only_last / recorder.T ) )
-            DY = float( recorder.tape[-1] - recorder.tape[-take_num] )
+            DY = float( self.tape[-1] - self.tape[-take_num] )
             DT = take_num * recorder.T
             overrate_est = float( DY ) / DT
             rate_observed = arrivalrate - overrate_est
@@ -411,7 +392,7 @@ if __name__ == '__main__' :
     def showresults() :
         plt.scatter( complexity_computed, complexity_estimated )
         
-    for t in range(50) :
+    for t in range(10) :
         roadnet, rategraph = get_sim_setting( mu=2. )
         
         R = totalrate( rategraph )
