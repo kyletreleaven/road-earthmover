@@ -16,10 +16,6 @@ import setiptah.roadgeometry.roadmap_basic as ROAD
 import setiptah.polyglint2d as pglint
 
 """ local dependencies """
-import probability as roadprob
-
-
-
 
 
 
@@ -238,6 +234,7 @@ def roadEd( roadnet, distr1, distr2=None, length_attr='length' ) :
 """ self test """
 if __name__ == '__main__' :
     import random
+    import probability as roadprob
     
     """ unit test """
     

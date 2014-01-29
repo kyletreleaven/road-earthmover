@@ -9,27 +9,20 @@ import scipy as sp
 import networkx as nx
 
 # dev
-from setiptah.eventsim.signaling import Signal, Message
-
 # mass transport framework
-#import mass_transport
 import setiptah.roadearthmover.tests.testcases as testcases
 import setiptah.roadearthmover.probability as massprob
+from setiptah.roadearthmover.rategraphs import totalrate, scale_rates
 
-import setiptah.roadearthmover.road_Ed as road_Ed
-import setiptah.roadearthmover.roademd as roademd
-import setiptah.roadearthmover.road_complexity as road_complexity
-#from mass_transport import road_Ed, roademd, road_complexity
-
-mcplx = road_complexity     # another alias
-#import mass_transport.road_complexity as mcplx
+#import setiptah.roadearthmover.road_Ed as road_Ed
+#import setiptah.roadearthmover.roademd as roademd
 
 # roadmap framework
 import setiptah.roadgeometry.roadmap_basic as ROAD
 import setiptah.roadgeometry.probability as roadprob
 
-
 # simulation framework
+from setiptah.eventsim.signaling import Signal, Message
 from setiptah.eventsim.simulation import Simulation
 #
 from setiptah.queuesim.queues import GatedQueue
@@ -86,18 +79,8 @@ def get_sim_setting( N=10, p=.3, mu=1., K=5, lam=1. ) :
 
 
 
-def totalrate( rategraph, rate='rate' ) :
-    totalrate = 0.
-    for _,__, data in rategraph.edges_iter( data=True ) :
-        totalrate += data.get( rate, 0. )
-    return totalrate
 
-def scale_rates( rategraph, alpha, rate='rate' ) :
-    res = nx.DiGraph()
-    for u,v, data in rategraph.edges_iter( data=True ) :
-        r = data.get( rate, 0. )
-        res.add_edge( u, v, { rate : alpha * r } )
-    return res
+
 
 class demand :
     def __init__(self, p, q ) :
@@ -131,7 +114,8 @@ def convert_complexity_and_servicerate( arg, sys_speed ) :
     return float( sys_speed ) / arg
     
     
-
+    
+    
 """ simulation-based network tester """
 class RoadmapEMD(object) :
     def __init__(self) :

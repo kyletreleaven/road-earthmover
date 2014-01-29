@@ -17,8 +17,19 @@ import setiptah.roadgeometry.probability as roadprob
 import road_Ed, roademd
 
 
+""" RateGraph Utilities """
 
-""" algorithms """
+
+
+
+
+
+
+
+
+
+
+""" Complexity Metrics """
 
 def MoversComplexity( roadmap, rategraph, length_attr='length', rate_attr='rate', **kwargs ) :
     # enroute cost
@@ -58,6 +69,57 @@ def computeImbalance( roadmap, rategraph, rate_attr='rate', **kwargs ) :
             road_data[weight2_attr] = -supply
             
             
+            
+            
+""" VALIDATION """
+
+def samplepairs( T, rategraph, roadmap, rate_attr='rate' ) :
+    pairs = []
+    point_on = lambda road : roadprob.sample_onroad( road, roadmap, 'length' )
+    for road1, road2, data in rategraph.edges_iter( data=True ) :
+        lam = data.get( rate_attr, 0. )
+        n = np.random.poisson( lam * T )
+        SS = [ point_on( road1 ) for i in xrange(n) ]
+        TT = [ point_on( road2 ) for i in xrange(n) ]
+        newp = zip(SS,TT)
+        pairs.extend( newp )
+        
+    return pairs
+
+
+def enroute_cost( pairs, roadmap ) :
+    distfunc = lambda p, q : ROAD.distance( roadmap, p, q, 'length' )
+    
+    enroutes = [ distfunc(s,t) for s,t in pairs ]
+    total_enroute = sum( enroutes )
+    return total_enroute
+
+def balance_cost( pairs, roadmap ) :
+    distfunc = lambda p, q : ROAD.distance( roadmap, p, q, 'length' )
+    
+    graph = nx.Graph()
+    N = len( pairs )
+    for i in xrange(N) :
+        for j in xrange(N) :
+            _, t = pairs[i]
+            s, _ = pairs[j]
+            dist = distfunc(t,s)
+            graph.add_edge( (i,0), (j,1), weight = -dist )  # about to do MAX_weight_matching
+            
+    """ obvious TODO: use the N log N matching algorithm here, instead! """
+    mate = nx.matching.max_weight_matching( graph, maxcardinality=True )
+    
+    def cost(i) :
+        first = (i,0)
+        second = mate[first]
+        return -graph.get_edge_data( first, second ).get('weight') 
+    balances = [ cost(i) for i in xrange(N) ]
+    total_balance = sum( balances )
+    return total_balance
+
+
+
+
 
 
 
@@ -85,49 +147,7 @@ def demand_balance_velocity( roadnet, rategraph, length='length', rate='rate' ) 
     computeImbalance( roadnet, rategraph, rate )
     return roademd.EarthMoversDistance( roadnet, length )
 
-            
-            
-            
-            
-""" VALIDATION """
 
-class demand :
-    def __init__(self, p, q ) :
-        self.pick = p
-        self.delv = q
-
-
-def sample_demands( T, rategraph, roadnet, rate='rate' ) :
-    demands = []
-    point_on = lambda road : roadprob.sample_onroad( road, roadnet, 'length' )
-    for road1, road2, data in rategraph.edges_iter( data=True ) :
-        n = np.random.poisson( data.get( rate, 0. ) * T )
-        newdems = [ demand( point_on( road1 ), point_on( road2 ) ) for i in range(n) ]
-        demands.extend( newdems )
-        
-    return demands
-
-
-def enroute_cost( demands, roadnet ) :
-    distfunc = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
-    
-    enroutes = [ distfunc( dem.pick, dem.delv ) for dem in demands ]
-    total_enroute = sum( enroutes )
-    return total_enroute
-
-def balance_cost( demands, roadnet ) :
-    distfunc = lambda p, q : ROAD.distance( roadnet, p, q, 'length' )
-    
-    graph = nx.Graph()
-    for dem1, dem2 in itertools.product( demands, demands ) :
-        dist = distfunc( dem1.delv, dem2.pick )
-        graph.add_edge( (dem1,0), (dem2,1), weight = -dist )    # about to do MAX_weight_matching
-            
-    mate = nx.matching.max_weight_matching( graph, maxcardinality=True )
-    balances = [ -graph.get_edge_data( (dem1,0), (dem2,1) ).get('weight') 
-                for ( (dem1,side1), (dem2,side2) ) in mate.iteritems() if side1 == 0 ]
-    total_balance = sum( balances )
-    return total_balance
 
 
 
@@ -156,7 +176,7 @@ if __name__ == '__main__' :
     
     if True :
         T = .5
-        DEMANDS = sample_demands( T, rategraph, roadnet )
+        DEMANDS = samplepairs( T, rategraph, roadnet )
         
         mean_enroute = enroute_cost( DEMANDS, roadnet ) / T
         
