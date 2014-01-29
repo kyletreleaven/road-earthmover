@@ -122,38 +122,10 @@ def sample_demands( T, rategraph, roadnet, rate='rate' ) :
     return script
     #return demands
 
-def demand_enroute_velocity( roadnet, rategraph, length='length', rate='rate' ) :
-    """
-    TODO: implement node <-> object checking
-    """
-    V = {}
-    for road1, road2, data in rategraph.edges_iter( data=True ) :
-        curr_rate = data.get( rate )
-        if curr_rate is None : continue
-        curr_v = curr_rate * road_Ed.roadEd_conditional( roadnet, road1, road2, length )
-        V[ (road1,road2) ] = curr_v
-        
-    return sum( V.values() )
-
-def demand_balance_velocity( roadnet, rategraph, length='length', rate='rate' ) :
-    computeImbalance( roadnet, rategraph, rate )
-    return roademd.EarthMoversDistance( roadnet, length )
-
-def computeImbalance( roadnet, rategraph, rate='rate' ) :
-    for road in rategraph.nodes_iter() :
-        supply = rategraph.in_degree( road, rate ) - rategraph.out_degree( road, rate )
-        _, road_data = ROAD.obtain_edge( roadnet, road, True )
-        if supply > 0. :
-            road_data['weight1'] = supply
-        elif supply < 0. :
-            road_data['weight2'] = -supply
 
 
 
 
-def moverscomplexity( roadnet, n_rategraph, length='length', rate='rate' ) :
-    miles_per_dem = road_complexity.MoversComplexity( roadnet, n_rategraph, length='length', rate='rate' )
-    return miles_per_dem
 
 def convert_complexity_and_servicerate( arg, sys_speed ) :
     return float( sys_speed ) / arg
@@ -334,6 +306,7 @@ class RoadmapEMD(object) :
 
 if __name__ == '__main__' :
     import pickle
+    from setiptah.roadearthmover.roadcplx import carryMileageRate, fetchMileageRate 
     
     # plotting
     import matplotlib as mpl
@@ -398,8 +371,8 @@ if __name__ == '__main__' :
         R = totalrate( rategraph )
         n_rategraph = scale_rates( rategraph, 1. / R )
         
-        enroute_velocity = demand_enroute_velocity( roadnet, n_rategraph )
-        balance_velocity = demand_balance_velocity( roadnet, n_rategraph )
+        enroute_velocity = carryMileageRate( roadnet, n_rategraph )
+        balance_velocity = fetchMileageRate( roadnet, n_rategraph )
         complexity = enroute_velocity + balance_velocity
         #complexity = moverscomplexity( roadnet, n_rategraph )
         

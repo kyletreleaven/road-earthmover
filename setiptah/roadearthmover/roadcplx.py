@@ -20,13 +20,52 @@ import road_Ed, roademd
 
 """ algorithms """
 
-def MoversComplexity( roadnet, rategraph, length='length', rate='rate' ) :
+def MoversComplexity( roadmap, rategraph, length_attr='length', rate_attr='rate', **kwargs ) :
     # enroute cost
-    enroute_cost = demand_enroute_velocity( roadnet, rategraph, length, rate )
-    balance_cost = demand_balance_velocity( roadnet, rategraph, length, rate )
+    enroute_cost = demand_enroute_velocity( roadmap, rategraph, length_attr, rate_attr )
+    balance_cost = demand_balance_velocity( roadmap, rategraph, length_attr, rate_attr, **kwargs )
     return enroute_cost + balance_cost
+# w/ alias
+moversComplexity = MoversComplexity
 
 
+def carryMileageRate( roadmap, rategraph, length_attr='length', rate_attr='rate' ) :
+    V = {}
+    for road1, road2, data in rategraph.edges_iter( data=True ) :
+        curr_rate = data.get( rate_attr )
+        if curr_rate is None : continue
+        curr_v = curr_rate * road_Ed.roadEd_conditional( roadmap, road1, road2, length_attr )
+        V[ (road1,road2) ] = curr_v
+        
+    return sum( V.values() )
+
+
+def fetchMileageRate( roadmap, rategraph, length_attr='length', rate_attr='rate', **kwargs ) :
+    computeImbalance( roadmap, rategraph, rate_attr, **kwargs )
+    return roademd.EarthMoversDistance( roadmap, length_attr )
+
+
+def computeImbalance( roadmap, rategraph, rate_attr='rate', **kwargs ) :
+    weight1_attr = kwargs.get( 'weight1_attr', 'weight1' )
+    weight2_attr = kwargs.get( 'weight2_attr', 'weight2' )
+
+    for road in rategraph.nodes_iter() :
+        supply = rategraph.in_degree( road, rate_attr ) - rategraph.out_degree( road, rate_attr )
+        _, road_data = ROAD.obtain_edge( roadmap, road, True )
+        if supply > 0. :
+            road_data[weight1_attr] = supply
+        elif supply < 0. :
+            road_data[weight2_attr] = -supply
+            
+            
+
+
+
+
+
+
+
+""" old signatures """
 
 def demand_enroute_velocity( roadnet, rategraph, length='length', rate='rate' ) :
     """
@@ -46,17 +85,6 @@ def demand_balance_velocity( roadnet, rategraph, length='length', rate='rate' ) 
     computeImbalance( roadnet, rategraph, rate )
     return roademd.EarthMoversDistance( roadnet, length )
 
-
-def computeImbalance( roadnet, rategraph, rate='rate' ) :
-    for road in rategraph.nodes_iter() :
-        supply = rategraph.in_degree( road, rate ) - rategraph.out_degree( road, rate )
-        _, road_data = ROAD.obtain_edge( roadnet, road, True )
-        if supply > 0. :
-            road_data['weight1'] = supply
-        elif supply < 0. :
-            road_data['weight2'] = -supply
-            
-            
             
             
             
