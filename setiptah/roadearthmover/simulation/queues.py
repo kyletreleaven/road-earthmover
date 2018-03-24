@@ -5,34 +5,8 @@ from setiptah.eventsim.signaling import Signal, Message
 import setiptah.roadgeometry.roadsearch as search
 
 
-# a think more easily in terms of objects than registers
+# I think more easily in terms of objects than registers
 class token : pass
-
-
-
-class Dispatch :
-    def join_sim(self) :
-        raise NotImplementedError('implement join_sim')
-        
-    class Interface :
-        def __init__(self, dispatch ) :
-            self.dispatch = dispatch
-            
-            """ signal """
-            self.output = Signal()
-            
-        def input(self, *args, **kwargs ) :
-            self.dispatch.input( self, *args, **kwargs )
-            
-    def newInterface(self) :
-        return self.Interface( self )
-            
-    def input(self, interface, *args, **kwargs ) :
-        """
-        when input is called, interface has received input (args,kwargs)
-        interface has "output" signal
-        """
-        raise NotImplementedError('implement "input" for dispatch')
 
 
 
@@ -92,9 +66,6 @@ class NNeighDispatcher :
         
         msg = Message( interface.demand_out, dem )
         self.sim.schedule( msg )
-        
-        
-        
         
         
         
@@ -187,5 +158,21 @@ class BatchNNeighDispatcher :
             self.request_batch()
             #self.sim.schedule( self.request_batch )
             
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+
             
             

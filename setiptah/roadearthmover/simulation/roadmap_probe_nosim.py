@@ -9,37 +9,52 @@ import scipy as sp
 import networkx as nx
 
 # dev
-# mass transport framework
-import setiptah.roadearthmover.tests.testcases as testcases
-import setiptah.roadearthmover.probability as massprob
-from setiptah.roadearthmover.rategraphs import totalrate, scale_rates
+from signaling import Signal, Message
 
-#import setiptah.roadearthmover.road_Ed as road_Ed
-#import setiptah.roadearthmover.roademd as roademd
+# mass transport framework
+import mass_transport
+import mass_transport.tests.testcases as testcases
+import mass_transport.probability as massprob
+
+from mass_transport import road_complexity
+import mass_transport.road_complexity as mcplx
+
 
 # roadmap framework
-import setiptah.roadgeometry.roadmap_basic as ROAD
-import setiptah.roadgeometry.probability as roadprob
+import roadgeometry.roadmap_basic as ROAD
+import roadgeometry.probability as roadprob
+
 
 # simulation framework
-from setiptah.eventsim.signaling import Signal, Message
-from setiptah.eventsim.simulation import Simulation
-#
-from setiptah.queuesim.queues import GatedQueue
-from setiptah.queuesim.sources import UniformClock, PoissonClock, ScriptSource
-#
-from setiptah.roadearthmover.simulation.sources import RoadnetDemandSource
-from setiptah.roadearthmover.simulation.queues import BatchNNeighDispatcher
-from setiptah.roadearthmover.simulation.servers import Vehicle
-
+from simulation import Simulation
+from sources import RoadnetDemandSource
+from queues import GatedQueue, BatchNNeighDispatcher
+from servers import Vehicle
 
 class data : pass
 
 
-def debug_input() :
-    if False : return raw_input()
+""" simulation object definitions """
 
-
+class UniformPoller :
+    def __init__(self, T ) :
+        self.T = T
+        self._counter = itertools.count()
+        
+        self.tape = []
+        
+    def set_query(self, callback ) :
+        self.callback = callback
+        
+    def join_sim(self, sim ) :
+        self.sim = sim
+        self.sim.schedule( self.tick )
+        
+    """ auto slot """
+    def tick(self) :
+        res = self.callback()
+        self.tape.append( res )
+        self.sim.schedule( self.tick, self.T )
 
 
 """ convenient constructors """
@@ -79,48 +94,33 @@ def get_sim_setting( N=10, p=.3, mu=1., K=5, lam=1. ) :
 
 
 
+def totalrate( rategraph, rate='rate' ) :
+    totalrate = 0.
+    for _,__, data in rategraph.edges_iter( data=True ) :
+        totalrate += data.get( rate, 0. )
+    return totalrate
 
+def scale_rates( rategraph, alpha, rate='rate' ) :
+    res = nx.DiGraph()
+    for u,v, data in rategraph.edges_iter( data=True ) :
+        r = data.get( rate, 0. )
+        res.add_edge( u, v, { rate : alpha * r } )
+    return res
 
-
-class demand :
-    def __init__(self, p, q ) :
-        self.pick = p
-        self.delv = q
-
-def sample_demands( T, rategraph, roadnet, rate='rate' ) :
-    demands = []
-    point_on = lambda road : roadprob.sample_onroad( road, roadnet, 'length' )
-    for road1, road2, data in rategraph.edges_iter( data=True ) :
-        n = np.random.poisson( data.get( rate, 0. ) * T )
-        #newdems = [ demand( point_on( road1 ), point_on( road2 ) ) for i in range(n) ]
-        newdems = [ ( point_on( road1 ), point_on( road2 ) ) for i in range(n) ]
-        demands.extend( newdems )
-        
-    numdem = len( demands )
-    print 'sampled %d' % numdem
-    debug_input()
-    
-    times = T * np.random.rand(numdem)
-    script = sorted( zip( times, demands ) )
-    return script
-    #return demands
-
-
-
-
-
+def moverscomplexity( roadnet, n_rategraph, length='length', rate='rate' ) :
+    miles_per_dem = road_complexity.MoversComplexity( roadnet, n_rategraph, length='length', rate='rate' )
+    return miles_per_dem
 
 def convert_complexity_and_servicerate( arg, sys_speed ) :
     return float( sys_speed ) / arg
     
     
-    
-    
+
 """ simulation-based network tester """
 class RoadmapEMD(object) :
     def __init__(self) :
         self.vehspeed = 1.
-        #self.horizon = 500.
+        self.horizon = 500.
         
     def scenario(self, roadnet, rategraph, numveh=1, vehspeed=1. ) :
         self.roadnet = roadnet
@@ -138,18 +138,11 @@ class RoadmapEMD(object) :
         sim = Simulation()
         self.sim = sim
         
-        if False :
-            script = sample_demands( self.horizon, self.rategraph, self.roadnet )
-            source = ScriptSource( script )
-            print 'obtained %d demands' % len( source.script )
-            debug_input()
-        else :
-            source = RoadnetDemandSource( self.roadnet, self.rategraph )
-            
+        source = RoadnetDemandSource( self.roadnet, self.rategraph )
         self.source = source
         source.join_sim( sim )
         
-        gate = GatedQueue() # because nearest neighbor "cheats" if the arrival rate is too high
+        gate = GatedQueue()
         self.gate = gate
         gate.join_sim( sim )
         
@@ -177,15 +170,13 @@ class RoadmapEMD(object) :
             veh.set_location( randpoint )
             veh.join_sim( sim )
         
-        # record number of unassigned demands
-        self.tape = []
-        def record_unassigned() :
-            unassg = len( self.gate._queue ) + len( self.dispatch.demands )
-            self.tape.append( unassg )
-        recorder = UniformClock( 1. )
-        recorder.join_sim( sim )
-        recorder.output.connect( record_unassigned )
+        # make a recorder
+        recorder = UniformPoller( 1. )
         self.recorder = recorder
+        def unassigned_query() :
+            return len( self.gate.demands ) + len( self.dispatch.demands )
+        recorder.set_query( unassigned_query )
+        recorder.join_sim( sim )
         
         # report demand arrivals to several places
         self.DEMANDS = []
@@ -196,7 +187,7 @@ class RoadmapEMD(object) :
             p, q = dem
             loc = p
             #dispatch.demand_arrived( dem, loc )
-            self.gate.arrival( dem )
+            self.gate.demand_arrived( dem )
             
         source_out = source.source()
         #source_out.connect( counting.increment )
@@ -220,12 +211,11 @@ class RoadmapEMD(object) :
             print "need a batch!!"
             
         # creates an interface from gate to interactive dispatcher
-        #gate_if = gate.spawn_interface()
-        #self.gate_if = gate_if
-        dispatch.request_batch.connect( gate.requestRelease )
+        gate_if = gate.spawn_interface()
+        self.gate_if = gate_if
+        dispatch.request_batch.connect( gate_if.request_in )
         dispatch.request_batch.connect( gimme )
-        gate.output.connect( dispatch.batch_arrived )
-        #gate_if.batch_out.connect( dispatch.batch_arrived )
+        gate_if.batch_out.connect( dispatch.batch_arrived )
         
         def hello( *args, **kwargs ) :
             print 'vehicle is ready!'
@@ -252,9 +242,9 @@ class RoadmapEMD(object) :
     """ after the simulation """
     def display(self) :
         recorder = self.recorder
-        n = len( self.tape )
+        n = len( recorder.tape )
         T = recorder.T * np.arange( n )
-        plt.plot( T, self.tape )
+        plt.plot( T, recorder.tape )
         plt.xlabel( 'Time elapsed' )
         plt.ylabel( 'Number of Demands Waiting' )
         
@@ -271,17 +261,13 @@ class RoadmapEMD(object) :
         
         print 'arrival rate (simulated, observed): %f, %f' % ( arrivalrate, total_demands / horizon )
         
-        if True :
-            # see what this does
-            rate_observed = sum([ veh.notches for veh in self.vehicles ]) / self.horizon
-        else :
-            #overrate_est = float( nleft - preload ) / horizon
-            take_only_last = .25 * horizon
-            take_num = int( np.ceil( take_only_last / recorder.T ) )
-            DY = float( self.tape[-1] - self.tape[-take_num] )
-            DT = take_num * recorder.T
-            overrate_est = float( DY ) / DT
-            rate_observed = arrivalrate - overrate_est
+        #overrate_est = float( nleft - preload ) / horizon
+        take_only_last = .25 * horizon
+        take_num = int( np.ceil( take_only_last / recorder.T ) )
+        DY = float( recorder.tape[-1] - recorder.tape[-take_num] )
+        DT = take_num * recorder.T
+        overrate_est = float( DY ) / DT
+        rate_observed = arrivalrate - overrate_est
         
         return rate_observed
 
@@ -290,7 +276,6 @@ class RoadmapEMD(object) :
 
 if __name__ == '__main__' :
     import pickle
-    from setiptah.roadearthmover.roadcplx import carryMileageRate, fetchMileageRate 
     
     # plotting
     import matplotlib as mpl
@@ -341,25 +326,17 @@ if __name__ == '__main__' :
         
 
     probe = RoadmapEMD()
-    probe.horizon = 1000.
+    probe.horizon = 2000.
     
     complexity_computed = []
     complexity_estimated = []
-    
-    def showresults() :
-        plt.scatter( complexity_computed, complexity_estimated )
-        
-    for t in range(10) :
-        roadnet, rategraph = get_sim_setting( mu=2. )
+    for t in range(20) :
+        roadnet, rategraph = get_sim_setting()
         
         R = totalrate( rategraph )
         n_rategraph = scale_rates( rategraph, 1. / R )
         
-        enroute_velocity = carryMileageRate( roadnet, n_rategraph )
-        balance_velocity = fetchMileageRate( roadnet, n_rategraph )
-        complexity = enroute_velocity + balance_velocity
-        #complexity = moverscomplexity( roadnet, n_rategraph )
-        
+        complexity = moverscomplexity( roadnet, n_rategraph )
         
         for k in range(1) :
             numveh = np.random.randint(1,5+1)
@@ -378,6 +355,8 @@ if __name__ == '__main__' :
             complexity_computed.append( complexity )
             complexity_estimated.append( complexity_observed )
         
+    def showresults() :
+        plt.scatter( complexity_computed, complexity_estimated )
         
     showresults()
     plt.show()
